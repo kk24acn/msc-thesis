@@ -1,3 +1,61 @@
-*.pdf
+# Folders
 doc
 ui-dashboard
+
+# Documents
+*.pdf
+
+# Node.js
+node_modules/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+env/
+venv/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Java
+*.class
+*.jar
+*.war
+*.ear
+
+# Visual Studio Code
+.vscode/
+
+# macOS system files
+.DS_Store
+
+# Log files
+*.log
+
+# Build directories
+build/
+dist/
+out/
+
+# Temporary files
+*.bak
+*.tmp
+*.swp
+*.swo
+
+# Docker
+.docker/
+
+# JetBrains IDE
+*.iml
+.idea/
+
+# Maven
+target/
+
+# npm package-lock
+package-lock.json
+
+# Rust
+target/

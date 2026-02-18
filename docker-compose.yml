@@ -1,0 +1,11 @@
+services:
+  hardhat:
+    build:
+      context: ./hardhat-server
+      dockerfile: Dockerfile
+    ports:
+      - "8545:8545"
+    command: ["npx", "hardhat", "node", "--hostname", "0.0.0.0"]
+    volumes:
+      - ./hardhat-server:/app
+      - /app/node_modules

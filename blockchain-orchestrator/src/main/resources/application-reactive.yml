@@ -1,0 +1,25 @@
+spring:
+  config:
+    activate:
+      on-profile: reactive
+
+  main:
+    web-application-type: reactive
+
+  r2dbc:
+    url: ${DB_R2DBC_URL:r2dbc:postgresql://localhost:5432/orchestrator}
+    username: ${DB_USERNAME:kapellmeister}
+    password: ${DB_PASSWORD:bach}
+
+    pool:
+      initial-size: 10
+      max-size: 50
+    shutdown:
+      await-termination: true
+
+  datasource:
+    enabled: false
+
+  spring.autoconfigure.exclude:
+    - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+    - org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration

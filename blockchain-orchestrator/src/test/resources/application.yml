@@ -1,0 +1,21 @@
+spring:
+  datasource:
+    username: sa
+    password: password
+    sql:
+      init:
+        mode: ${DB_INIT_MODE:always}
+        schema-locations: classpath:schema.sql
+        script-location: classpath:data.sql
+
+  hardhat:
+    rpc-url: ${HARDHAT_RPC_URL:http://127.0.0.1:8545}
+    private-key: ${HARDHAT_PRIVATE_KEY:0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80}
+    transaction-timeout: ${HARDHAT_TX_TIMEOUT:20s}
+    max-retries: ${HARDHAT_MAX_RETRIES:3}
+    retry-backoff: ${HARDHAT_RETRY_BACKOFF:300ms}
+    receipt-poll-interval: ${HARDHAT_RECEIPT_POLL_INTERVAL:1s}
+    gas-limit: ${HARDHAT_GAS_LIMIT:21000}
+    chain-id: ${HARDHAT_CHAIN_ID:}
+    recovery-concurrency: ${HARDHAT_RECOVERY_CONCURRENCY:4}
+    recovery-interval-ms: ${HARDHAT_RECOVERY_INTERVAL_MS:30000}

@@ -1,0 +1,27 @@
+spring:
+  config:
+    activate:
+      on-profile: servlet
+
+  main:
+    web-application-type: servlet
+
+  datasource:
+    jdbcUrl: ${DB_JDBC_URL:jdbc:postgresql://localhost:5432/orchestrator}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+
+  r2dbc:
+    enabled: false
+    pool:
+      enabled: false
+
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.r2dbc.autoconfigure.R2dbcAutoConfiguration
+      - org.springframework.boot.r2dbc.autoconfigure.R2dbcTransactionManagerAutoConfiguration

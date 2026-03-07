@@ -4,14 +4,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.web3j.crypto.Credentials;
-import org.web3j.crypto.RawTransaction;
-import org.web3j.crypto.TransactionEncoder;
 import org.web3j.crypto.WalletUtils;
 import org.web3j.protocol.Web3j;
 import org.web3j.protocol.core.DefaultBlockParameterName;
 import org.web3j.protocol.core.methods.response.*;
 import org.web3j.utils.Convert;
-import org.web3j.utils.Numeric;
+import signer.SignerGrpc;
+import signer.SignerOuterClass;
 import uk.ac.herts.orchestrator.api.dto.SubmitTransactionRequest;
 import uk.ac.herts.orchestrator.api.dto.SubmitTransactionResponse;
 import uk.ac.herts.orchestrator.config.HardhatProperties;
@@ -35,14 +34,18 @@ public class ServletOrchestratorService {
     private final HardhatProperties hardhatProperties;
     private final ServletTransactionDao transactionDao;
 
+    private final SignerGrpc.SignerBlockingStub signerBlockingStub;
+
     public ServletOrchestratorService(Web3j web3j,
                                       Credentials credentials,
                                       ServletTransactionDao transactionDao,
-                                      HardhatProperties hardhatProperties) {
+                                      HardhatProperties hardhatProperties,
+                                      SignerGrpc.SignerBlockingStub signerBlockingStub) {
         this.web3j = web3j;
         this.credentials = credentials;
         this.transactionDao = transactionDao;
         this.hardhatProperties = hardhatProperties;
+        this.signerBlockingStub = signerBlockingStub;
     }
 
     public SubmitTransactionResponse startTransaction(SubmitTransactionRequest request) {
@@ -80,13 +83,12 @@ public class ServletOrchestratorService {
         return transaction;
     }
 
-    private SubmitTransactionRequest validateTransactionRequest(SubmitTransactionRequest request) {
+    private void validateTransactionRequest(SubmitTransactionRequest request) {
         if (!WalletUtils.isValidAddress(request.toAddress())) {
             log.error("Invalid toAddress format in transaction request: {}", request);
             throw new IllegalArgumentException("Invalid toAddress: expected a valid Ethereum hex address");
         }
         log.info("Transaction request is valid: {}", request);
-        return request;
     }
 
     private Transaction signTransaction(Transaction transaction) throws InterruptedException, ExecutionException {
@@ -94,23 +96,20 @@ public class ServletOrchestratorService {
 
         CompletableFuture<EthGetTransactionCount> nonce = web3j.ethGetTransactionCount(credentials.getAddress(), DefaultBlockParameterName.PENDING).sendAsync();
         CompletableFuture<EthGasPrice> gasPrice = web3j.ethGasPrice().sendAsync();
-        CompletableFuture<EthChainId> chainId = web3j.ethChainId().sendAsync();
-
+        CompletableFuture<EthChainId> chainId = web3j.ethChainId().sendAsync(); //TODO what it returns?
         BigInteger valueWei = Convert.toWei(transaction.getAmountEther(), Convert.Unit.ETHER).toBigIntegerExact();
-        RawTransaction rawTransaction = RawTransaction.createEtherTransaction(
-            nonce.get().getTransactionCount(),
-            gasPrice.get().getGasPrice(),
-            hardhatProperties.getGasLimit(),
-            transaction.getToAddress(),
-            valueWei);
 
-        log.info("Chain ID: {}", chainId.get().getId());
-        log.info("Transaction type: {}", rawTransaction.getType());
-        transaction.setSignedPayload(TransactionEncoder.signMessage(rawTransaction,
-//            chainId.get().getId(), why it returns 2?
-            31337,
-            credentials));
-        return transaction;
+        SignerOuterClass.TransactionRequest trans = SignerOuterClass.TransactionRequest.newBuilder()
+                                                        .setNonce(nonce.get().getTransactionCount().toString())
+                                                        .setGasPrice(gasPrice.get().getGasPrice().toString())
+                                                        .setFrom("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")
+                                                        .setTo(transaction.getToAddress())
+                                                        .setValue(valueWei.toString())
+//                                                        .setData("abc")
+                                                        .setChainId(31337) // TODO hardcoded
+                                                        .build();
+        SignerOuterClass.TransactionResponse response = signerBlockingStub.signTransaction(trans);
+        return transactionDao.markSigned(transaction, response.getRawTxHex());
     }
 
     private Transaction submitTransactionOnChain(Transaction transaction) {
@@ -120,12 +119,14 @@ public class ServletOrchestratorService {
         int maxRetries = hardhatProperties.getMaxRetries();
         Duration delay = hardhatProperties.getRetryBackoff();
         Throwable lastError = null;
-        String payload = Numeric.toHexString(transaction.getSignedPayload());
+        String payload = transaction.getSignedHexPayload();
+        log.info("Transaction payload: {}", payload);
 
         while (attempt <= maxRetries) {
             try {
                 EthSendTransaction transactionResult = web3j.ethSendRawTransaction(payload).send();
                 if (transactionResult.hasError()) {
+                    transactionDao.markFailed(transaction, transactionResult.getError().getMessage());
                     throw new IllegalStateException("Failed to submit transaction: " + transactionResult.getError());
                 }
                 return transactionDao.markSubmitted(transaction, transactionResult);
@@ -143,6 +144,7 @@ public class ServletOrchestratorService {
 
                 delay = delay.multipliedBy(2);
                 attempt++;
+                transactionDao.markSubmitting(transaction, true);
             }
         }
         throw new RuntimeException(String.format("Failed to send transaction after {} retries", maxRetries), lastError);

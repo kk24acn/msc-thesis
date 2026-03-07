@@ -51,6 +51,13 @@ public class ServletTransactionDao {
         return repository.save(transaction);
     }
 
+    public Transaction markSigned(Transaction transaction, String hexPayload) {
+        transaction.setStatus(TransactionStatus.SIGNED);
+        transaction.setSignedHexPayload(hexPayload);
+        transaction.touchUpdatedAt();
+        return repository.save(transaction);
+    }
+
     public Transaction markSubmitting(Transaction transaction) {
         transaction.setStatus(TransactionStatus.SUBMITTING);
         transaction.touchUpdatedAt();

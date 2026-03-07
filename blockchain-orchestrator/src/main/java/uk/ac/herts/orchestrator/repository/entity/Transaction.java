@@ -1,25 +1,17 @@
 package uk.ac.herts.orchestrator.repository.entity;
 
-import java.math.BigDecimal;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.util.UUID;
-
-import org.web3j.protocol.core.methods.response.TransactionReceipt;
-
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
-import jakarta.persistence.Transient;
-import jakarta.persistence.Version;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.web3j.protocol.core.methods.response.TransactionReceipt;
 import uk.ac.herts.orchestrator.model.TransactionStatus;
+
+import java.math.BigDecimal;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.UUID;
 
 @Data
 @Builder
@@ -48,12 +40,11 @@ public class Transaction {
     private OffsetDateTime createdAt;
     @Column(name = "updated_at")
     private OffsetDateTime updatedAt;
+    @Column(name = "signedHexPayload")
+    private String signedHexPayload;
     @Version
     @Column(name = "version")
     private Long version;
-
-    @Transient
-    private byte[] signedPayload;
 
     @Transient
     private TransactionReceipt receipt;

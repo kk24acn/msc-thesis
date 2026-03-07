@@ -1,6 +1,6 @@
 spring:
   profiles:
-    active: servlet
+    active: ${SPRING_PROFILES_ACTIVE:servlet}
   application:
     name: blockchain-orchestrator
 
@@ -11,7 +11,7 @@ spring:
     sql:
       init:
         mode: ${DB_INIT_MODE:always}
-        schema-locations: classpath:schema.sql
+        schema-locations: ${DB_SCHEMA_LOCATION:classpath:schema.sql}
 
   # Hardhat
   hardhat:
@@ -25,3 +25,26 @@ spring:
     chain-id: ${HARDHAT_CHAIN_ID:}
     recovery-concurrency: ${HARDHAT_RECOVERY_CONCURRENCY:4}
     recovery-interval-ms: ${HARDHAT_RECOVERY_INTERVAL_MS:30000}
+
+  ssl:
+    bundle:
+      jks:
+        sslclient:
+          keystore:
+            location: ${SSL_KEYSTORE_LOCATION:classpath:certs/orchestrator.p12}
+            password: ${SSL_KEYSTORE_PASS:secret}
+            type: ${SSL_KEYSTORE_TYPE:PKCS12}
+          key:
+            password: ${SSL_KEY_PASS:secret}
+          truststore:
+            location: ${SSL_TRUSTSTORE_LOCATION:classpath:certs/ca.p12}
+            password: ${SSL_TRUSTSTORE_PASS:secret}
+
+  grpc:
+    client:
+      channels:
+        signer:
+          ssl:
+            bundle: sslclient
+          address: ${SIGNER_RPC_URL:127.0.0.1:50051}
+          negotiation-type: TLS

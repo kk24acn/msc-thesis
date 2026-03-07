@@ -5,6 +5,7 @@ import java.util.EnumSet;
 public enum TransactionStatus {
     NEW,
     SIGNING,
+    SIGNED,
     SUBMITTING,
     SUBMITTED,
     FAILED,
@@ -16,8 +17,8 @@ public enum TransactionStatus {
 
     public static EnumSet<TransactionStatus> inFlightEnumSet() {
         return EnumSet.of(
-                TransactionStatus.NEW,
-                TransactionStatus.SIGNING,
-                TransactionStatus.SUBMITTING);
+            TransactionStatus.NEW,
+            TransactionStatus.SIGNING,
+            TransactionStatus.SUBMITTING);
     }
 }

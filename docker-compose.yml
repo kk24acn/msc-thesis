@@ -1,11 +1,36 @@
 services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: kapellmeister
+      POSTGRES_PASSWORD: bach
+      POSTGRES_DB: orchestrator
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+  
   hardhat:
     build:
-      context: ./hardhat-server
+      context: ./hardhat-node
       dockerfile: Dockerfile
     ports:
       - "8545:8545"
-    command: ["npx", "hardhat", "node", "--hostname", "0.0.0.0"]
     volumes:
-      - ./hardhat-server:/app
-      - /app/node_modules
+      - ./hardhat-node:/app
+
+  dashboard:
+    build:
+      context: ./ui-dashboard
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./ui-dashboard:/app
+    depends_on:
+      - postgres
+      - hardhat
+
+volumes:
+  postgres_data:
+    driver: local

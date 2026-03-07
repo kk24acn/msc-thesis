@@ -1,0 +1,92 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: kapellmeister
+      POSTGRES_PASSWORD: bach
+      POSTGRES_DB: orchestrator
+    ports:
+      - "5432:5432"
+    networks:
+      - blockchain
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  signer:
+    build:
+      context: ./blockchain-signer
+      dockerfile: Dockerfile
+      additional_contexts:
+        shared_proto: ./util/proto
+    environment:
+      - RUST_LOG=debug
+    volumes:
+      - ./util/certs/ca.crt:/app/certs/ca.crt
+      - ./util/certs/signer/signer.crt:/app/certs/signer.crt
+      - ./util/certs/signer/signer.key:/app/certs/signer.key
+    networks:
+      - signer
+
+  hardhat:
+    build:
+      context: ./hardhat-node
+      dockerfile: Dockerfile
+    ports:
+      - "8545:8545"
+    networks:
+      - blockchain
+    volumes:
+      - ./hardhat-node:/app
+
+  orchestrator:
+    build:
+      context: ./blockchain-orchestrator
+      dockerfile: Dockerfile
+      additional_contexts:
+          shared_proto: ./util/proto
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=servlet
+      - DB_JDBC_URL=jdbc:postgresql://postgres:5432/orchestrator
+      - HARDHAT_RPC_URL=http://hardhat:8545
+      - SIGNER_RPC_URL=signer:50051
+      - SSL_KEYSTORE_LOCATION=file:/app/certs/orchestrator.p12
+      - SSL_KEYSTORE_PASS=secret
+      - SSL_KEYSTORE_TYPE=PKCS12
+      - SSL_KEY_PASS=secret
+      - SSL_TRUSTSTORE_LOCATION=file:/app/certs/ca.p12
+      - SSL_TRUSTSTORE_PASS=secret
+    volumes:
+      - ./util/certs/ca.p12:/app/certs/ca.p12
+      - ./util/certs/orchestrator/orchestrator.p12:/app/certs/orchestrator.p12
+    networks:
+      - signer
+      - blockchain
+    depends_on:
+      - postgres
+      - hardhat
+
+  dashboard:
+    build:
+      context: ./ui-dashboard
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./ui-dashboard:/app
+    networks:
+      - blockchain
+    depends_on:
+      - postgres
+      - hardhat
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  blockchain:
+    driver: bridge
+  signer:
+    driver: bridge

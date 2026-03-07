@@ -1,0 +1,19 @@
+[package]
+name = "blockchain-signer"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tonic = {version="0.14.5", features = ["server", "_tls-any"]}
+rustls = { version = "0.23.37", features = ["ring"] }
+prost = "0.14.3"
+tonic-prost = "*"
+tokio = { version = "1.50.0", features = ["full"] }
+log = "0.4.29"
+hex = "0.4.3"
+ethers = "2.0.14"
+env_logger = "0.11.9"
+clap = { version = "4.5.60", features = ["derive"] }
+
+[build-dependencies]
+tonic-prost-build = "0.14.5"

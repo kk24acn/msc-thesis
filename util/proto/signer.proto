@@ -1,0 +1,22 @@
+syntax = "proto3";
+package signer;
+
+message TransactionRequest {
+    string nonce = 1;
+    string gas = 2;
+    string gas_price = 3;
+    string from = 4;
+    string to = 5;
+    string value = 6;
+    bytes data = 7;
+    uint64 chain_id = 8;
+}
+
+message TransactionResponse {
+    string raw_tx_hex = 1;
+    string tx_hash_hex = 2;
+}
+
+service Signer {
+    rpc SignTransaction(TransactionRequest) returns (TransactionResponse);
+}

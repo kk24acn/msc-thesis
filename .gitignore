@@ -1,6 +1,7 @@
 # Folders
 _doc
 ui-dashboard
+__node_bak
 
 # Documents
 *.pdf
@@ -61,17 +62,17 @@ package-lock.json
 # Rust
 target/
 
-# Hardhat files
-cache
-artifacts
+# pnpm deploy output
+bundle/
 
-# TypeChain files
-typechain
-typechain-types
+# Hardhat Build Artifacts
+artifacts/
 
-# solidity-coverage files
-coverage
-coverage.json
+# Hardhat compilation (v2) support directory
+cache/
 
-# Hardhat Ignition default folder for deployments against a local node
-ignition/deployments/chain-31337
+# Typechain output
+types/
+
+# Hardhat coverage reports
+coverage/

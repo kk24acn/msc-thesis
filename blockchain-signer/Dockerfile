@@ -1,4 +1,4 @@
-FROM rust:1.94-slim-bullseye AS builder
+FROM rust:1.94-slim-bookworm AS builder
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends protobuf-compiler ca-certificates \
@@ -6,7 +6,9 @@ RUN apt-get update \
 
 WORKDIR /usr/src/signer
 
-COPY --from=shared_proto signer.proto ./proto/signer.proto
+RUN mkdir -p ./proto
+COPY --from=shared_proto . ./proto/
+
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 COPY build.rs ./
@@ -21,8 +23,11 @@ RUN apt-get update \
 
 WORKDIR /app
 
+# Create data directory for database persistence
+RUN mkdir -p /app/data /app/certs
+
 COPY --from=builder /usr/src/signer/target/release/blockchain-signer ./blockchain-signer
 
 EXPOSE 50051
 
-ENTRYPOINT ["./blockchain-signer", "--cert", "./certs/signer.crt", "--key", "./certs/signer.key", "--ca", "./certs/ca.crt"]
+ENTRYPOINT ["/usr/bin/tini", "--", "./blockchain-signer"]

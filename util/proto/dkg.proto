@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package mpc.signer;
+
+service DkgService {
+    rpc InitDkg(InitDkgRequest) returns (InitDkgResponse);
+    rpc AdvanceDkg(AdvanceDkgRequest) returns (AdvanceDkgResponse);
+}
+
+message InitDkgRequest {
+    string session_id = 1;
+    uint32 party_id = 2;
+    uint32 threshold = 3;
+    uint32 total_parties = 4;
+    string derivation_path = 5;
+}
+
+message InitDkgResponse {
+    bool success = 1;
+}
+
+message AdvanceDkgRequest {
+    string session_id = 1;
+    uint32 party_id = 2;
+    repeated bytes payloads = 3; 
+}
+
+message AdvanceDkgResponse {
+    bytes output = 1;
+    bool is_done = 2;
+}

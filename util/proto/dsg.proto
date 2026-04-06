@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package mpc.signer;
+option java_package = "uk.ac.herts.orchestrator.grpc.signer";
+
+service DsgService {
+    rpc InitDsg(InitDsgRequest) returns (InitDsgResponse);
+    rpc AdvanceDsg(AdvanceDsgRequest) returns (AdvanceDsgResponse);
+}
+
+message InitDsgRequest {
+    string key_id = 1;
+    string dsg_session_id = 2;
+    uint32 party_id = 3;
+    bytes message_hash = 4;
+    string derivation_path = 5;
+}
+
+message InitDsgResponse {
+    bool success = 1;
+}
+
+message AdvanceDsgRequest {
+    string dsg_session_id = 1;
+    uint32 party_id = 2;
+    repeated bytes payloads = 3;
+}
+
+message AdvanceDsgResponse {
+    bytes output = 1;
+    bool is_done = 2;
+}

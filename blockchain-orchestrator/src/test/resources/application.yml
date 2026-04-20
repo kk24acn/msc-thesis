@@ -2,6 +2,8 @@ spring:
   datasource:
     username: sa
     password: password
+    jdbcUrl: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE
+    driverClassName: org.h2.Driver
     sql:
       init:
         mode: ${DB_INIT_MODE:always}
@@ -19,3 +21,6 @@ spring:
     chain-id: ${HARDHAT_CHAIN_ID:}
     recovery-concurrency: ${HARDHAT_RECOVERY_CONCURRENCY:4}
     recovery-interval-ms: ${HARDHAT_RECOVERY_INTERVAL_MS:30000}
+
+  mpc:
+    signer-addresses: 127.0.0.1:50051,127.0.0.1:50052,127.0.0.1:50053

@@ -1,25 +1,43 @@
 services:
   postgres:
     image: postgres:18-alpine
+    pull_policy: missing
     environment:
       POSTGRES_USER: kapellmeister
       POSTGRES_PASSWORD: bach
       POSTGRES_DB: orchestrator
     ports:
       - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-  
+    networks:
+      - orchestrator
+      - dashboard
+
   hardhat:
     build:
       context: ./hardhat-node
       dockerfile: Dockerfile
     ports:
       - "8545:8545"
-    volumes:
-      - ./hardhat-node:/app
+    networks:
+      - orchestrator
+      - dashboard
 
-  dashboard:
+  dashboard-postgrest:
+    image: postgrest/postgrest
+    pull_policy: missing
+    ports:
+      - "3001:3000"
+    environment:
+      PGRST_DB_URI: postgres://kapellmeister:bach@postgres:5432/orchestrator
+      PGRST_DB_SCHEMA: public
+      PGRST_DB_ANON_ROLE: kapellmeister
+    networks:
+      - dashboard
+    depends_on:
+      - orchestrator
+      - postgres
+
+  dashboard-ui:
     build:
       context: ./ui-dashboard
       dockerfile: Dockerfile
@@ -27,10 +45,177 @@ services:
       - "3000:3000"
     volumes:
       - ./ui-dashboard:/app
+    environment:
+      - REACT_APP_POSTGREST_URL=http://localhost:3001
+      - REACT_APP_HARDHAT_RPC_URL=http://localhost:8545
+    networks:
+      - dashboard
     depends_on:
       - postgres
       - hardhat
 
+  signer-1:
+    build:
+      context: ./blockchain-signer
+      dockerfile: Dockerfile
+      additional_contexts:
+        shared_proto: ./util/proto
+    environment:
+      - RUST_LOG=debug
+    command: ["--addr", "0.0.0.0:50051", "--party-id", "1", "--db-path", "/app/data/node.redb"]
+    ports:
+      - "50051:50051"
+    volumes:
+      - signer1_data:/app/data
+    networks:
+      - signer
+
+  signer-2:
+    build:
+      context: ./blockchain-signer
+      dockerfile: Dockerfile
+      additional_contexts:
+        shared_proto: ./util/proto
+    environment:
+      - RUST_LOG=debug
+    command: ["--addr", "0.0.0.0:50051", "--party-id", "2", "--db-path", "/app/data/node.redb"]
+    ports:
+      - "50052:50051"
+    volumes:
+      - signer2_data:/app/data
+    networks:
+      - signer
+
+  signer-3:
+    build:
+      context: ./blockchain-signer
+      dockerfile: Dockerfile
+      additional_contexts:
+        shared_proto: ./util/proto
+    environment:
+      - RUST_LOG=debug
+    command: ["--addr", "0.0.0.0:50051", "--party-id", "3", "--db-path", "/app/data/node.redb"]
+    ports:
+      - "50053:50051"
+    volumes:
+      - signer3_data:/app/data
+    networks:
+      - signer
+
+  orchestrator:
+    build:
+      context: ./blockchain-orchestrator
+      dockerfile: Dockerfile
+      additional_contexts:
+          shared_proto: ./util/proto
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=servlet
+      - DB_JDBC_URL=jdbc:postgresql://postgres:5432/orchestrator
+      - HARDHAT_RPC_URL=http://hardhat:8545
+      - SIGNER_RPC_URLS=faultlab-proxy-1:50051,faultlab-proxy-2:50051,faultlab-proxy-3:50051
+      - SSL_KEYSTORE_LOCATION=file:/app/certs/orchestrator.p12
+      - SSL_KEYSTORE_PASS=secret
+      - SSL_KEYSTORE_TYPE=PKCS12
+      - SSL_KEY_PASS=secret
+      - SSL_TRUSTSTORE_LOCATION=file:/app/certs/ca.p12
+      - SSL_TRUSTSTORE_PASS=secret
+    volumes:
+      - ./util/certs/ca.p12:/app/certs/ca.p12
+      - ./util/certs/orchestrator/orchestrator.p12:/app/certs/orchestrator.p12
+    networks:
+      - signer
+      - orchestrator
+    depends_on:
+      postgres:
+        condition: service_started
+      hardhat:
+        condition: service_started
+      signer-1:
+        condition: service_started
+      signer-2:
+        condition: service_started
+      signer-3:
+        condition: service_started
+
+  faultlab-proxy-1:
+    build:
+      context: ./faultlab
+      dockerfile: Dockerfile
+      args:
+        SIGNER_HOST: signer-1
+        SIGNER_PORT: 50051
+    ports:
+      - "55551:50051"
+      - "5001:5000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - MITMPROXY_CONFDIR=/app/.mitmproxy
+    networks:
+      - signer
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  faultlab-proxy-2:
+    build:
+      context: ./faultlab
+      dockerfile: Dockerfile
+      args:
+        SIGNER_HOST: signer-2
+        SIGNER_PORT: 50051
+    ports:
+      - "55552:50051"
+      - "5002:5000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - MITMPROXY_CONFDIR=/app/.mitmproxy
+    networks:
+      - signer
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  faultlab-proxy-3:
+    build:
+      context: ./faultlab
+      dockerfile: Dockerfile
+      args:
+        SIGNER_HOST: signer-3
+        SIGNER_PORT: 50051
+    ports:
+      - "55553:50051"
+      - "5003:5000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - MITMPROXY_CONFDIR=/app/.mitmproxy
+    networks:
+      - signer
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
 volumes:
   postgres_data:
     driver: local
+  signer1_data:
+    driver: local
+  signer2_data:
+    driver: local
+  signer3_data:
+    driver: local
+
+networks:
+  orchestrator:
+    driver: bridge
+  dashboard:
+    driver: bridge
+  signer:
+    driver: bridge

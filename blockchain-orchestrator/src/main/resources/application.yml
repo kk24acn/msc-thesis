@@ -1,17 +1,26 @@
 spring:
-  profiles:
-    active: ${SPRING_PROFILES_ACTIVE:servlet}
   application:
     name: blockchain-orchestrator
+  main:
+    web-application-type: servlet
 
   # DB
   datasource:
     username: ${DB_USERNAME:kapellmeister}
     password: ${DB_PASSWORD:bach}
+    jdbcUrl: ${DB_JDBC_URL:jdbc:postgresql://localhost:5432/orchestrator}
+    driver-class-name: org.postgresql.Driver
     sql:
       init:
         mode: ${DB_INIT_MODE:always}
         schema-locations: ${DB_SCHEMA_LOCATION:classpath:schema.sql}
+        data-locations: ${DB_DATA_LOCATION:classpath:data.sql}
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
 
   # Hardhat
   hardhat:
@@ -30,21 +39,27 @@ spring:
     bundle:
       jks:
         sslclient:
-          keystore:
-            location: ${SSL_KEYSTORE_LOCATION:classpath:certs/orchestrator.p12}
-            password: ${SSL_KEYSTORE_PASS:secret}
-            type: ${SSL_KEYSTORE_TYPE:PKCS12}
-          key:
-            password: ${SSL_KEY_PASS:secret}
           truststore:
             location: ${SSL_TRUSTSTORE_LOCATION:classpath:certs/ca.p12}
             password: ${SSL_TRUSTSTORE_PASS:secret}
 
-  grpc:
-    client:
-      channels:
-        signer:
-          ssl:
-            bundle: sslclient
-          address: ${SIGNER_RPC_URL:127.0.0.1:50051}
-          negotiation-type: TLS
+  mpc:
+    signer-addresses: ${SIGNER_RPC_URLS:127.0.0.1:50051,127.0.0.1:50051,127.0.0.1:50051}
+
+  # grpc:
+  #   client:
+  #     channels:
+  #       signer:
+  #         ssl:
+  #           bundle: sslclient
+  #         address: ${SIGNER_RPC_URL:127.0.0.1:8081}
+  #         negotiation-type: TLS
+
+logging:
+  level:
+    root: INFO
+    uk.ac.herts.orchestrator: DEBUG
+    uk.ac.herts.orchestrator.config: DEBUG
+    uk.ac.herts.orchestrator.util: DEBUG
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"

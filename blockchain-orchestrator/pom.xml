@@ -10,37 +10,9 @@
 
     <groupId>uk.ac.herts</groupId>
     <artifactId>blockchain-orchestrator</artifactId>
-
     <version>0.0.1-SNAPSHOT</version>
-
     <name>blockchain-orchestrator</name>
-    <description>Spring WebFlux Blockchain Transaction Orchestration Service</description>
-
-    <licenses>
-        <license>
-            <name>MIT License</name>
-            <url>https://opensource.org/licenses/MIT</url>
-            <distribution>repo</distribution>
-        </license>
-    </licenses>
-
-    <developers>
-        <developer>
-            <id>24058149</id>
-            <name>Kyrylo Kostakov</name>
-            <email>kk24acn@herts.ac.uk</email>
-            <url>https://github.com/kk24acn</url>
-            <organization>University of Hertfordshire</organization>
-            <organizationUrl>https://www.herts.ac.uk/</organizationUrl>
-        </developer>
-    </developers>
-
-    <scm>
-        <connection/>
-        <developerConnection/>
-        <tag/>
-        <url/>
-    </scm>
+    <description>Blockchain Transaction Orchestration Service</description>
 
     <properties>
         <java.version>25</java.version>
@@ -50,11 +22,23 @@
         <protobuf-java.version>4.34.0</protobuf-java.version>
     </properties>
 
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.grpc</groupId>
+                <artifactId>spring-grpc-dependencies</artifactId>
+                <version>${spring-grpc.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
-        <!-- Core -->
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-webflux</artifactId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
         <dependency>
@@ -73,19 +57,15 @@
             <optional>true</optional>
         </dependency>
 
-        <!-- Blockchain -->
         <dependency>
             <groupId>org.web3j</groupId>
             <artifactId>core</artifactId>
             <version>${web3j.version}</version>
         </dependency>
 
-        <!-- GRPC (Signer communication)-->
         <dependency>
             <groupId>org.springframework.grpc</groupId>
             <artifactId>spring-grpc-client-spring-boot-starter</artifactId>
-            <version>${spring-grpc.version}</version>
-            <scope>compile</scope>
             <exclusions>
                 <exclusion>
                     <groupId>io.grpc</groupId>
@@ -93,65 +73,45 @@
                 </exclusion>
             </exclusions>
         </dependency>
-
+        
         <dependency>
             <groupId>io.grpc</groupId>
             <artifactId>grpc-netty-shaded</artifactId>
         </dependency>
 
-        <!-- TODO check if i need it -->
         <dependency>
             <groupId>com.google.protobuf</groupId>
             <artifactId>protobuf-java</artifactId>
             <version>${protobuf-java.version}</version>
-            <scope>compile</scope>
         </dependency>
 
-        <!-- TODO check if i need it -->
         <dependency>
             <groupId>io.grpc</groupId>
             <artifactId>grpc-protobuf</artifactId>
             <version>${grpc.version}</version>
         </dependency>
 
-        <!-- TODO check if i need it -->
         <dependency>
             <groupId>io.grpc</groupId>
             <artifactId>grpc-stub</artifactId>
             <version>${grpc.version}</version>
         </dependency>
 
-        <!-- Database -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-r2dbc</artifactId>
-        </dependency>
-
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
-
-        <dependency>
-            <groupId>org.postgresql</groupId>
-            <artifactId>r2dbc-postgresql</artifactId>
-            <scope>runtime</scope>
-        </dependency>
-
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
         </dependency>
 
-        <!-- Util -->
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <version>1.18.42</version>
         </dependency>
 
-        <!-- Tests -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
@@ -161,13 +121,6 @@
         <dependency>
             <groupId>org.springframework.grpc</groupId>
             <artifactId>spring-grpc-test</artifactId>
-            <version>${spring-grpc.version}</version>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>io.r2dbc</groupId>
-            <artifactId>r2dbc-h2</artifactId>
             <scope>test</scope>
         </dependency>
 
@@ -176,25 +129,7 @@
             <artifactId>h2</artifactId>
             <scope>test</scope>
         </dependency>
-
-        <dependency>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
-            <scope>test</scope>
-        </dependency>
     </dependencies>
-
-    <dependencyManagement>
-        <dependencies>
-            <dependency>
-                <groupId>org.springframework.grpc</groupId>
-                <artifactId>spring-grpc-dependencies</artifactId>
-                <version>${spring-grpc.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
 
     <build>
         <plugins>
@@ -222,12 +157,10 @@
                     </execution>
                 </executions>
             </plugin>
-
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
-
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -242,5 +175,4 @@
             </plugin>
         </plugins>
     </build>
-
 </project>

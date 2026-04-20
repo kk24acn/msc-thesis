@@ -1,10 +1,7 @@
 package uk.ac.herts.orchestrator.repository.entity;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import org.web3j.protocol.core.methods.response.TransactionReceipt;
 import uk.ac.herts.orchestrator.model.TransactionStatus;
 
@@ -13,35 +10,47 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.UUID;
 
-@Data
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
 @Entity
 @Table(name = "transactions")
+@Getter
+@Setter
+@Builder
+@AllArgsConstructor
+@NoArgsConstructor
 public class Transaction {
+
     @Id
     @Column(name = "id")
     private UUID id;
+
     @Column(name = "to_address")
     private String toAddress;
+
     @Column(name = "amount_ether")
     private BigDecimal amountEther;
+
     @Column(name = "status")
     @Enumerated(EnumType.STRING)
     private TransactionStatus status;
+
     @Column(name = "transaction_hash")
     private String transactionHash;
+
     @Column(name = "error_message")
     private String errorMessage;
+
     @Column(name = "retry_count")
     private int retryCount;
+
     @Column(name = "created_at")
     private OffsetDateTime createdAt;
+
     @Column(name = "updated_at")
     private OffsetDateTime updatedAt;
+
     @Column(name = "signedHexPayload")
     private String signedHexPayload;
+
     @Version
     @Column(name = "version")
     private Long version;

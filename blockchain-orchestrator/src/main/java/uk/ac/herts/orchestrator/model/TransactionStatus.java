@@ -8,17 +8,19 @@ public enum TransactionStatus {
     SIGNED,
     SUBMITTING,
     SUBMITTED,
-    FAILED,
-    COMPLETED;
+    CONFIRMING,
+    CONFIRMED,
+    FAILED;
 
     public boolean isFinished() {
-        return this == FAILED || this == COMPLETED;
+        return this == FAILED || this == CONFIRMED;
     }
 
     public static EnumSet<TransactionStatus> inFlightEnumSet() {
         return EnumSet.of(
             TransactionStatus.NEW,
             TransactionStatus.SIGNING,
-            TransactionStatus.SUBMITTING);
+            TransactionStatus.SUBMITTING,
+            TransactionStatus.CONFIRMING);
     }
 }

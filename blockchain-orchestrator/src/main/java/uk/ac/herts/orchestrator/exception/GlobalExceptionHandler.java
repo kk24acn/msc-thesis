@@ -12,18 +12,30 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(TransactionSubmissionException.class)
     public ResponseEntity<ApiErrorResponse> handleSubmissionFailure(TransactionSubmissionException exception) {
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
-                .body(new ApiErrorResponse("TRANSACTION_SUBMISSION_FAILED", exception.getMessage()));
+                   .body(new ApiErrorResponse("TRANSACTION_SUBMISSION_FAILED", exception.getMessage()));
+    }
+
+    @ExceptionHandler(TransactionSigningException.class)
+    public ResponseEntity<ApiErrorResponse> handleSigningFailure(TransactionSigningException exception) {
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                   .body(new ApiErrorResponse("TRANSACTION_SIGNING_FAILED", exception.getMessage()));
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<ApiErrorResponse> handleIllegalState(IllegalStateException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                   .body(new ApiErrorResponse("INVALID_STATE", exception.getMessage()));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiErrorResponse> handleIllegalArgument(IllegalArgumentException exception) {
         return ResponseEntity.badRequest()
-                .body(new ApiErrorResponse("INVALID_REQUEST", exception.getMessage()));
+                   .body(new ApiErrorResponse("INVALID_REQUEST", exception.getMessage()));
     }
 
     @ExceptionHandler(TransactionNotFoundException.class)
     public ResponseEntity<ApiErrorResponse> handleNotFound(TransactionNotFoundException exception) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(new ApiErrorResponse("TRANSACTION_NOT_FOUND", exception.getMessage()));
+                   .body(new ApiErrorResponse("TRANSACTION_NOT_FOUND", exception.getMessage()));
     }
 }

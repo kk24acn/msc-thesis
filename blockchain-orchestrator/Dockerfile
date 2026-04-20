@@ -7,7 +7,7 @@ COPY pom.xml ./
 RUN mvn -q -DskipTests dependency:go-offline
 
 COPY src src
-COPY --from=shared_proto signer.proto ./src/main/proto/signer.proto
+COPY --from=shared_proto dsg.proto ./src/main/proto/dsg.proto
 RUN mvn -q clean package -DskipTests
 
 FROM eclipse-temurin:25.0.2_10-jre

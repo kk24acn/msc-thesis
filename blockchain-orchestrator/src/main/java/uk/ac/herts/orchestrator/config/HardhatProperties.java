@@ -4,7 +4,6 @@ import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
-import java.math.BigInteger;
 import java.time.Duration;
 
 @Setter
@@ -17,7 +16,7 @@ public class HardhatProperties {
     private int maxRetries = 3;
     private Duration retryBackoff = Duration.ofMillis(300);
     private Duration receiptPollInterval = Duration.ofSeconds(1);
-    private BigInteger gasLimit = BigInteger.valueOf(21_000);
+    private Long gasLimit = 21_000L;
     private Long chainId;
     private int recoveryConcurrency = 4;
 }

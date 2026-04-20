@@ -7,7 +7,8 @@ import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 
 public record SubmitTransactionRequest(
-        @NotBlank String toAddress,
-        @NotNull @DecimalMin(value = "0.000000000000000001") BigDecimal amountEther
+    @NotBlank String keyId,
+    @NotBlank String toAddress,
+    @NotNull @DecimalMin(value = "0.000000000000000001") BigDecimal amountEther
 ) {
 }

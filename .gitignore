@@ -1,7 +1,6 @@
 # Folders
 _doc
-ui-dashboard
-__node_bak
+_sig
 
 # Documents
 *.pdf
@@ -18,6 +17,8 @@ env/
 venv/
 pip-log.txt
 pip-delete-this-directory.txt
+.pytest_cache/
+results
 
 # Java
 *.class

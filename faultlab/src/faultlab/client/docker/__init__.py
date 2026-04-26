@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import subprocess
 import time
@@ -28,7 +29,7 @@ class DockerClient:
     def _format_volume_name(self, name: str) -> str:
         return f"{self.project_name}_{name}"
 
-    def _wait_for_log(
+    async def _wait_for_log(
         self,
         container_name: str,
         expected_message: str,
@@ -46,21 +47,21 @@ class DockerClient:
             except Exception as e:
                 logger.debug(f"Error checking logs for {container_name}: {e}")
 
-            time.sleep(poll_interval)
+            await asyncio.sleep(poll_interval)
         return False
 
-    def restart_hardhat(self, timeout_seconds: int = 30) -> None:
+    async def restart_hardhat(self, timeout_seconds: int = 30) -> None:
         container_name = self._format_container_name("hardhat")
         expected_message = "Started HTTP and WebSocket JSON-RPC server at"
 
         logger.info("Restarting hardhat container")
         try:
-            container = self.client.containers.get(container_name)
+            container = await asyncio.to_thread(self.client.containers.get, container_name)
             restart_time = time.time()
-            container.restart()
+            await asyncio.to_thread(container.restart)
             logger.debug("Hardhat container restart command sent")
 
-            if self._wait_for_log(container_name, expected_message, timeout_seconds, restart_time):
+            if await self._wait_for_log(container_name, expected_message, timeout_seconds, restart_time):
                 logger.info("Hardhat is ready")
             else:
                 logger.warning(
@@ -70,18 +71,18 @@ class DockerClient:
         except Exception as e:
             raise DockerClientError(f"Failed to restart hardhat: {e}") from e
 
-    def restart_orchestrator(self, timeout_seconds: int = 60) -> None:
+    async def restart_orchestrator(self, timeout_seconds: int = 60) -> None:
         container_name = self._format_container_name("orchestrator")
         expected_message = "OrchestratorApplication - Started OrchestratorApplication in"
 
         logger.info("Restarting orchestrator container")
         try:
-            container = self.client.containers.get(container_name)
+            container = await asyncio.to_thread(self.client.containers.get, container_name)
             restart_time = time.time()
-            container.restart()
+            await asyncio.to_thread(container.restart)
             logger.debug("Orchestrator container restart command sent")
 
-            if self._wait_for_log(container_name, expected_message, timeout_seconds, restart_time):
+            if await self._wait_for_log(container_name, expected_message, timeout_seconds, restart_time):
                 logger.info("Orchestrator is ready")
             else:
                 logger.warning(
@@ -91,7 +92,7 @@ class DockerClient:
         except Exception as e:
             raise DockerClientError(f"Failed to restart orchestrator: {e}") from e
 
-    def cleanup_signer_databases(self, timeout_seconds: int = 15) -> None:
+    async def cleanup_signer_databases(self, timeout_seconds: int = 15) -> None:
         signer_ids = [1, 2, 3]
         container_names = [self._format_container_name(f"signer-{i}") for i in signer_ids]
         volume_names = [self._format_volume_name(f"signer{i}_data") for i in signer_ids]
@@ -100,42 +101,55 @@ class DockerClient:
         logger.info("Performing signers `redb` databases cleanup")
         try:
             logger.debug("Removing signer containers...")
-            for container_name in container_names:
+
+            async def remove_container(name: str) -> None:
                 try:
-                    container = self.client.containers.get(container_name)
-                    container.remove(force=True)  # force=True stops the container if running
-                    logger.debug(f"Removed {container_name}")
-                except docker.errors.NotFound as e:
-                    logger.info(f"Signer container `{container_name}` does not exist. Proceeding...")
+                    container = await asyncio.to_thread(self.client.containers.get, name)
+                    await asyncio.to_thread(container.remove, force=True)
+                    logger.debug(f"Removed {name}")
+                except docker.errors.NotFound:
+                    logger.info(f"Signer container `{name}` does not exist. Proceeding...")
                 except Exception as e:
-                    raise DockerClientError(f"Failed to remove signer container `{container_name}`: {e}") from e
+                    raise DockerClientError(f"Failed to remove signer container `{name}`: {e}") from e
+
+            await asyncio.gather(*[remove_container(name) for name in container_names])
 
             logger.debug("Removing signer data volumes...")
-            for volume_name in volume_names:
+
+            async def remove_volume(name: str) -> None:
                 try:
-                    volume = self.client.volumes.get(volume_name)
-                    volume.remove()
-                    logger.debug(f"Removed volume {volume_name}")
-                except docker.errors.NotFound as e:
-                    logger.info(f"Signer volume `{volume_name}` does not exist. Proceeding...")
+                    volume = await asyncio.to_thread(self.client.volumes.get, name)
+                    await asyncio.to_thread(volume.remove)
+                    logger.debug(f"Removed volume {name}")
+                except docker.errors.NotFound:
+                    logger.info(f"Signer volume `{name}` does not exist. Proceeding...")
                 except Exception as e:
-                    raise DockerClientError(f"Failed to remove volume `{volume_name}`: {e}") from e
+                    raise DockerClientError(f"Failed to remove volume `{name}`: {e}") from e
+
+            await asyncio.gather(*[remove_volume(name) for name in volume_names])
 
             logger.debug("Recreating signer containers via docker compose...")
             startup_time = time.time()
             try:
-                # Use docker compose to recreate the removed containers
                 signer_names = [f"signer-{i}" for i in signer_ids]
                 cmd = ["docker", "compose", "up", "-d", "--no-deps"] + signer_names
-                subprocess.run(cmd, check=True, capture_output=True)
+
+                def run_docker_compose():
+                    return subprocess.run(cmd, check=True, capture_output=True)
+
+                await asyncio.to_thread(run_docker_compose)
                 logger.debug("Signer containers recreated")
             except subprocess.CalledProcessError as e:
                 raise DockerClientError(
                     f"Failed to recreate signer containers with docker compose: {e.stderr.decode()}"
                 ) from e
 
-            for container_name in container_names:
-                self._wait_for_log(container_name, expected_message, timeout_seconds, startup_time)
+            await asyncio.gather(
+                *[
+                    self._wait_for_log(container_name, expected_message, timeout_seconds, startup_time)
+                    for container_name in container_names
+                ]
+            )
 
             logger.info("Signer containers are ready with fresh redb databases")
         except Exception as e:

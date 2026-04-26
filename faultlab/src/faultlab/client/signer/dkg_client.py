@@ -1,6 +1,7 @@
+import asyncio
 import grpc
 import logging
-from typing import Optional
+from typing import Optional, cast
 from faultlab.proto import dkg_pb2, dkg_pb2_grpc
 from faultlab.db import MpcKeysRepository
 
@@ -104,15 +105,23 @@ class DkgClient:
         except Exception as e:
             raise DkgClientError(f"DKG session {session_id} failed: {e}") from e
 
-    def setup_keys(self, num_sessions: int, threshold: int, total_parties: int) -> int:
+    async def setup_keys(self, num_sessions: int, threshold: int, total_parties: int) -> int:
         logger.debug(f"Initiating {num_sessions} DKG sessions with threshold={threshold}, total_parties={total_parties}") # fmt: skip
-        successful_sessions = 0
 
-        for i in range(num_sessions):
+        tasks = [
+            asyncio.to_thread(self.setup_key, f"dkg-session-{i}", threshold, total_parties) for i in range(num_sessions)
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        successful_sessions = 0
+        for i, result in enumerate(results):
             session_id = f"dkg-session-{i}"
-            eth_address = self.setup_key(session_id, threshold, total_parties)
+            if isinstance(result, Exception):
+                logger.error(f"DKG session {session_id} failed: {result}")
+                continue
 
             try:
+                eth_address = cast(str, result)
                 self.mpc_keys_repository.save(session_id, eth_address, threshold, total_parties, self.derivation_path)
                 successful_sessions += 1
                 logger.debug(f"Stored key metadata for {session_id}")

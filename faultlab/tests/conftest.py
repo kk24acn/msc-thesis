@@ -1,10 +1,8 @@
-from pandas import DataFrame
 import pytest
 import httpx
 import asyncpg
 import asyncio
 import logging
-import threading
 from datetime import datetime, timezone
 
 from decimal import Decimal
@@ -25,15 +23,23 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
-def prepare_mpc_accounts(mpc_keys_repository: MpcKeysRepository, dkg_client: DkgClient, funder_client: FunderClient):
+async def setup_and_fund_mpc_accounts(
+    mpc_keys_repository: MpcKeysRepository,
+    dkg_client: DkgClient,
+    funder_client: FunderClient,
+):
     try:
-        dkg_client.setup_keys(
+        await dkg_client.setup_keys(
             num_sessions=settings.DKG_SESSIONS,
             threshold=settings.DKG_THRESHOLD,
             total_parties=settings.DKG_TOTAL_PARTIES,
         )
         keys_df = mpc_keys_repository.fetch_all()
-        funder_client.fund_accounts_batch(keys_df["ethereum_address"].tolist(), Decimal(settings.FUNDING_AMOUNT_ETH))
+        await asyncio.to_thread(
+            funder_client.fund_accounts_batch,
+            keys_df["ethereum_address"].tolist(),
+            Decimal(settings.FUNDING_AMOUNT_ETH),
+        )
         return keys_df
     except Exception as e:
         logger.error(f"DKG setup failed: {e}")
@@ -108,12 +114,13 @@ def transactions_repository() -> TransactionsRepository:
 
 
 @pytest.fixture(autouse=True)
-def collect_transaction_metrics(request: pytest.FixtureRequest, transactions_repository: TransactionsRepository):
+def collect_metrics(request: pytest.FixtureRequest, transactions_repository: TransactionsRepository):
     """Collect and save transaction metrics for tests marked with @pytest.mark.collect_metrics"""
     if request.node.get_closest_marker("collect_metrics") is None:
         return
-
+    transactions_repository.truncate()
     start_time = datetime.now(timezone.utc)
+
     yield
 
     try:
@@ -137,46 +144,37 @@ def blockchain_refresh(
 
     This fixture performs:
     1. Restarts hardhat (resets chain state)
-    2. Restarts orchestrator (resets nonce counters)
-    3. Clears keyshare DBs on signer nodes
+    2. Clears keyshare DBs on signer nodes
     3. Truncates transactions table
     4. Truncates mpc_accounts table
-    5. Initiates DKG setup to compute new MPC accounts set
-    6. Funds all new MPC accounts
+
+    5. Restarts orchestrator (resets nonce counters)
+    6. Computes and funds new MPC accounts set
     """
     if request.node.get_closest_marker("blockchain_refresh") is None:
         return
 
     logger.info("Blockchain refresh triggered for test")
 
-    hardhat_thread = threading.Thread(target=docker_client.restart_hardhat)
-    cleanup_thread = threading.Thread(target=docker_client.cleanup_signer_databases)
+    async def refresh():
+        await asyncio.gather(
+            docker_client.restart_hardhat(),
+            docker_client.cleanup_signer_databases(),
+            asyncio.to_thread(transactions_repository.truncate),
+            asyncio.to_thread(mpc_keys_repository.truncate),
+        )
+        await asyncio.gather(
+            docker_client.restart_orchestrator(),
+            setup_and_fund_mpc_accounts(mpc_keys_repository, dkg_client, funder_client),
+        )
 
-    hardhat_thread.start()
-    cleanup_thread.start()
-
-    hardhat_thread.join()
-    cleanup_thread.join()
-
-    docker_client.restart_orchestrator()
-
-    transactions_repository.truncate()
-    mpc_keys_repository.truncate()
-
-    prepare_mpc_accounts(mpc_keys_repository, dkg_client, funder_client)
+    asyncio.run(refresh())
 
 
 @pytest.fixture
-def mpc_accounts(
-    mpc_keys_repository: MpcKeysRepository,
-    dkg_client: DkgClient,
-    funder_client: FunderClient,
-) -> list[tuple[str, str]]:
-
+def mpc_accounts(mpc_keys_repository: MpcKeysRepository) -> list[tuple[str, str]]:
     keys_df = mpc_keys_repository.fetch_all()
-    if len(keys_df) < 2:
-        keys_df = prepare_mpc_accounts(mpc_keys_repository, dkg_client, funder_client)
-        if keys_df is None or len(keys_df) < 2:
-            pytest.skip("Failed to setup MPC accounts")
+    if len(keys_df) < 1:
+        pytest.skip("No accounts found in `mpc_accounts` table")
 
     return list(zip(keys_df["key_id"], keys_df["ethereum_address"]))

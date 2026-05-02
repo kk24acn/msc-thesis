@@ -5,10 +5,31 @@ from threading import Thread
 from flask import Flask, jsonify, request
 from flask.wrappers import Response
 
-from fault_state import FaultConfig, FaultState
+from fault_state import FaultConfig, FaultState, FaultType
 
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_fault_config(payload: dict) -> FaultConfig:
+    failure_rate = payload.get("failure_rate", 100)
+    if not isinstance(failure_rate, int) or not (1 <= failure_rate <= 100):
+        raise ValueError("failure_rate must be an integer between 1 and 100")
+
+    raw_fault_type = payload.get("fault_type")
+    try:
+        fault_type = FaultType(raw_fault_type) if raw_fault_type else None
+    except ValueError:
+        raise ValueError(f"unknown fault_type '{raw_fault_type}', must be one of {[e.value for e in FaultType]}")
+
+    return FaultConfig(
+        enabled=payload.get("enabled", False),
+        fault_type=fault_type,
+        target_service=payload.get("target_service", ""),
+        target_method=payload.get("target_method", ""),
+        failure_rate=failure_rate,
+        metadata=payload.get("metadata", {}),
+    )
 
 
 class ControlPlane:
@@ -24,13 +45,7 @@ class ControlPlane:
         def inject_fault() -> Union[Response, tuple[Response, int]]:
             try:
                 payload = request.get_json() or {}
-                fault_config = FaultConfig(
-                    enabled=payload.get("enabled", False),
-                    fault_type=payload.get("fault_type", ""),
-                    target_service=payload.get("target_service", ""),
-                    target_method=payload.get("target_method", ""),
-                    metadata=payload.get("metadata", {}),
-                )
+                fault_config = _parse_fault_config(payload)
                 self.fault_state.update(fault_config)
                 logger.info(
                     f"Fault configuration updated: {fault_config.fault_type} "

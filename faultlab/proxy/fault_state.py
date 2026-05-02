@@ -2,15 +2,25 @@ from __future__ import annotations
 
 import threading
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any
+
+
+class FaultType(str, Enum):
+    DROP_REQ = "DROP_REQ"
+    DELAY = "DELAY"
+    DROP_RES = "DROP_RES"
+    MUTATE = "MUTATE"
+    REPLAY = "REPLAY"
 
 
 @dataclass
 class FaultConfig:
     enabled: bool = False
-    fault_type: str = ""
+    fault_type: FaultType | None = None
     target_service: str = ""
     target_method: str = ""
+    failure_rate: int = 100
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -30,6 +40,7 @@ class FaultState:
                 fault_type=self._current_fault.fault_type,
                 target_service=self._current_fault.target_service,
                 target_method=self._current_fault.target_method,
+                failure_rate=self._current_fault.failure_rate,
                 metadata=dict(self._current_fault.metadata),
             )
 

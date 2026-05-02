@@ -117,6 +117,7 @@ def transactions_repository() -> TransactionsRepository:
 def collect_metrics(request: pytest.FixtureRequest, transactions_repository: TransactionsRepository):
     """Collect and save transaction metrics for tests marked with @pytest.mark.collect_metrics"""
     if request.node.get_closest_marker("collect_metrics") is None:
+        yield
         return
     transactions_repository.truncate()
     start_time = datetime.now(timezone.utc)
@@ -165,6 +166,7 @@ def blockchain_refresh(
         )
         await asyncio.gather(
             docker_client.restart_orchestrator(),
+            docker_client.restart_proxies(),
             setup_and_fund_mpc_accounts(mpc_keys_repository, dkg_client, funder_client),
         )
 

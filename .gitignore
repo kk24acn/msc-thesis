@@ -1,6 +1,7 @@
 # Folders
 _doc
 _sig
+.github
 
 # Documents
 *.pdf
@@ -62,6 +63,7 @@ package-lock.json
 
 # Rust
 target/
+*.redb
 
 # pnpm deploy output
 bundle/

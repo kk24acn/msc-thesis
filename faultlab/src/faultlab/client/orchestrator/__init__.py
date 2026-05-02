@@ -15,10 +15,10 @@ class OrchestratorClient:
         self.client: AsyncClient = client
         self.base_url: str = base_url
 
-    async def submit_transaction(self, key_id: str, amount: Decimal, to_address: str) -> Response:
+    async def submit_transaction(self, key_id: str, amount: Decimal, to_address: str, trace_id: int = 0) -> Response:
         payload = {"keyId": key_id, "toAddress": to_address, "amountEther": str(amount)}
         logger.debug(f"Submitting transaction request with payload={payload}")
-        return await self.client.post(self.base_url, json=payload)
+        return await self.client.post(self.base_url, json=payload, headers={"x-trace-id": str(trace_id)})
 
     async def _submit_transaction_task(
         self,
@@ -26,9 +26,12 @@ class OrchestratorClient:
         from_address: str,
         to_address: str,
         amount: Decimal,
+        trace_id: int = 0,
     ) -> bool:
         try:
-            response = await self.submit_transaction(key_id=key_id, amount=amount, to_address=to_address)
+            response = await self.submit_transaction(
+                key_id=key_id, amount=amount, to_address=to_address, trace_id=trace_id
+            )
             if not response.is_success:
                 logger.warning(
                     f"Transaction request from key_id={key_id} failed. "
@@ -47,10 +50,10 @@ class OrchestratorClient:
         amount_range: tuple[float, float] = DEFAULT_AMOUNT_RANGE,
     ) -> int:
         tasks = []
-        for _ in range(count):
+        for trace_id in range(count):
             (from_key_id, from_address), (_, to_address) = random.sample(accounts, 2)
             amount = Decimal(str(round(random.uniform(amount_range[0], amount_range[1]), 6)))
-            tasks.append(self._submit_transaction_task(from_key_id, from_address, to_address, amount))
+            tasks.append(self._submit_transaction_task(from_key_id, from_address, to_address, amount, trace_id))
 
         logger.info(f"Submitting {count} concurrent transactions...")
         results = await tqdm.gather(*tasks, desc="Transactions", total=count)

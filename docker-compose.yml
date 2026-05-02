@@ -115,6 +115,7 @@ services:
       - DB_JDBC_URL=jdbc:postgresql://postgres:5432/orchestrator
       - HARDHAT_RPC_URL=http://hardhat:8545
       - SIGNER_RPC_URLS=faultlab-proxy-1:50051,faultlab-proxy-2:50051,faultlab-proxy-3:50051
+      # - SIGNER_RPC_URLS=signer-1:50051,signer-2:50051,signer-3:50051
       - SSL_KEYSTORE_LOCATION=file:/app/certs/orchestrator.p12
       - SSL_KEYSTORE_PASS=secret
       - SSL_KEYSTORE_TYPE=PKCS12

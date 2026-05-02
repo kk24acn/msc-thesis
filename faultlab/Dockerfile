@@ -6,10 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir mitmproxy flask
-
-COPY proxy-entrypoint.sh /app/proxy-entrypoint.sh
-RUN chmod +x /app/proxy-entrypoint.sh
+RUN pip install --no-cache-dir grpcio grpcio-tools flask
 
 COPY proxy/ /app/proxy/
 
@@ -18,12 +15,11 @@ ARG SIGNER_PORT
 
 EXPOSE 50051 5000
 
-ENV PYTHONUNBUFFERED=1
-ENV MITMPROXY_CONFDIR=/app/.mitmproxy
+# Disable log buffering
+ENV PYTHONUNBUFFERED=1 
 ENV SIGNER_HOST=${SIGNER_HOST}
 ENV SIGNER_PORT=${SIGNER_PORT}
 ENV PROXY_PORT=50051
+ENV PYTHONPATH=/app/proxy
 
-RUN mkdir -p $MITMPROXY_CONFDIR
-
-ENTRYPOINT ["/app/proxy-entrypoint.sh"]
+CMD ["python", "proxy/main.py"]

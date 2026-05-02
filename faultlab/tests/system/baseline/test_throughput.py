@@ -6,6 +6,7 @@ NUM_TRANSACTIONS = 1000
 
 
 @pytest.mark.asyncio
+@pytest.mark.blockchain_refresh
 async def test_baseline_1_tx(orchestrator_client: OrchestratorClient, mpc_accounts: list[tuple[str, str]]):
     successful = await orchestrator_client.submit_transactions_batch(mpc_accounts, 1)
     assert successful == 1

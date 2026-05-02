@@ -16,10 +16,19 @@ RUST_LOG=$LOG_REM
 ## Compiling Protobuf
 Regenerate gRPC code after modifying `.proto` files:
 
+### Test Suite
 ```bash
 micromamba run -n faultlab_env python -m grpc_tools.protoc \
     -I./src \
     --python_out=./src/ \
     --grpc_python_out=./src/ \
     ./src/faultlab/proto/dkg.proto
+```
+### Proxy
+```bash
+micromamba run -n faultlab_env python -m grpc_tools.protoc \
+    -I./proxy \
+    --python_out=./proxy/ \
+    --grpc_python_out=./proxy/ \
+    ./proxy/proto/dsg.proto
 ```

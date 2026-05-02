@@ -1,4 +1,4 @@
-import { Wallet, Users, Zap } from 'lucide-react';
+import { Wallet, Zap } from 'lucide-react';
 
 const StatsCards = ({ accounts, funderAccounts }) => {
   const activeBalance = accounts?.reduce((sum, acc) => sum + acc.balance, 0) || 0;

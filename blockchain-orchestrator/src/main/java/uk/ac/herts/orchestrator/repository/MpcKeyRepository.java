@@ -8,6 +8,5 @@ import java.util.Optional;
 
 @Repository
 public interface MpcKeyRepository extends JpaRepository<MpcKey, String> {
-
     Optional<MpcKey> findByEthereumAddress(String ethereumAddress);
 }

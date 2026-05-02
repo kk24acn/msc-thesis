@@ -59,8 +59,9 @@ class ControlPlane:
         @self.app.route("/status", methods=["GET"])
         def get_status() -> Response:
             current_fault = self.fault_state.get()
+            active = current_fault.__dict__ if current_fault else {}
             logger.info(f"Current fault: {current_fault}")
-            return jsonify({"status": "ok", "active_fault": current_fault.__dict__})
+            return jsonify({"status": "ok", "active_fault": active})
 
         @self.app.route("/reset", methods=["POST"])
         def reset_faults() -> Response:

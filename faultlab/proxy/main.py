@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+from concurrent import futures
 
 import grpc
 from proto import dsg_pb2_grpc
@@ -24,7 +25,7 @@ async def _main() -> None:
     channel = grpc.aio.insecure_channel(f"{SIGNER_HOST}:{SIGNER_PORT}")
     dsg_stub = dsg_pb2_grpc.DsgServiceStub(channel)
 
-    server = grpc.aio.server()
+    server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=10))
     dsg_pb2_grpc.add_DsgServiceServicer_to_server(DsgServiceProxy(dsg_stub, fault_state), server)
     server.add_insecure_port(f"0.0.0.0:{PROXY_LISTEN_PORT}")
 
@@ -34,10 +35,6 @@ async def _main() -> None:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        # datefmt="%H:%M:%S",
-    )
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
     logging.getLogger("grpc").setLevel(logging.WARNING)
     asyncio.run(_main())

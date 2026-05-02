@@ -43,7 +43,7 @@ def compute_metrics(transactions_repo: "TransactionsRepository", start_time: dat
         logger.warning("No transactions found for metrics computation")
         return TransactionMetrics()
 
-    # TODO change updated add to new `confirmed_at` column for better precision
+    # TODO change `updated_at` to new `confirmed_at` column for better precision
     df["latency_s"] = (df["updated_at"] - df["created_at"]).dt.total_seconds()
 
     successful = (df["status"] == "CONFIRMED").sum()

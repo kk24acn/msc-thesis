@@ -16,7 +16,6 @@ from faultlab.db.transactions import TransactionsRepository
 from faultlab.client.signer import DkgClient
 from faultlab.analysis.metrics import compute_metrics, save_metrics_csv
 
-
 logger = logging.getLogger(__name__)
 
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -114,22 +113,38 @@ def transactions_repository() -> TransactionsRepository:
 
 
 @pytest.fixture(autouse=True)
-def collect_metrics(request: pytest.FixtureRequest, transactions_repository: TransactionsRepository):
-    """Collect and save transaction metrics for tests marked with @pytest.mark.collect_metrics"""
+def collect_metrics(
+    request: pytest.FixtureRequest, transactions_repository: TransactionsRepository, docker_client: DockerClient
+):
+    """Collect and save transaction metrics for tests marked with @pytest.mark.collect_metrics.
+
+    Stops non-essential dashboard containers during test execution for fair metrics collection,
+    then restarts them after completion.
+    """
     if request.node.get_closest_marker("collect_metrics") is None:
         yield
         return
-    transactions_repository.truncate()
+
+    async def setup_metrics():
+        await docker_client.stop_dashboard_containers()
+        transactions_repository.truncate()
+
+    async def teardown_metrics():
+        try:
+            metrics = compute_metrics(transactions_repository, start_time)
+            metrics.log()
+            save_metrics_csv(request.node.name, transactions_repository, start_time)
+        except Exception as e:
+            logger.error(f"Failed to collect metrics for {request.node.name}: {e}")
+        finally:
+            await docker_client.start_dashboard_containers()
+
+    asyncio.run(setup_metrics())
     start_time = datetime.now(timezone.utc)
 
     yield
 
-    try:
-        metrics = compute_metrics(transactions_repository, start_time)
-        metrics.log()
-        save_metrics_csv(request.node.name, transactions_repository, start_time)
-    except Exception as e:
-        logger.error(f"Failed to collect metrics for {request.node.name}: {e}")
+    asyncio.run(teardown_metrics())
 
 
 @pytest.fixture(autouse=True)

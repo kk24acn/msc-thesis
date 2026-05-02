@@ -24,4 +24,4 @@ EXPOSE 8080
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
 
-CMD ["java", "-jar", "/app/orchestrator.jar"]
+CMD ["java", "--enable-native-access=ALL-UNNAMED", "-jar", "/app/orchestrator.jar"]

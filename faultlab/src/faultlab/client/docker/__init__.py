@@ -176,3 +176,41 @@ class DockerClient:
                 logger.info("All signer containers are ready with fresh redb databases")
         except Exception as e:
             raise DockerClientError(f"Failed to cleanup signer databases: {e}") from e
+
+    async def stop_dashboard_containers(self) -> None:
+        """Stop dashboard containers to reduce resource usage during metrics collection."""
+        dashboard_services = ["dashboard-postgrest", "dashboard-ui"]
+        container_names = [self._format_container_name(service) for service in dashboard_services]
+
+        logger.info("Stopping dashboard containers for fair metrics collection")
+        try:
+            for container_name in container_names:
+                try:
+                    container = await asyncio.to_thread(self.client.containers.get, container_name)
+                    await asyncio.to_thread(container.stop)
+                    logger.debug(f"Stopped {container_name}")
+                except docker.errors.NotFound:
+                    logger.debug(f"Container {container_name} not found, skipping stop")
+                except Exception as e:
+                    logger.warning(f"Failed to stop {container_name}: {e}")
+        except Exception as e:
+            raise DockerClientError(f"Failed to stop dashboard containers: {e}") from e
+
+    async def start_dashboard_containers(self) -> None:
+        """Start dashboard containers after metrics collection is complete."""
+        dashboard_services = ["dashboard-postgrest", "dashboard-ui"]
+        container_names = [self._format_container_name(service) for service in dashboard_services]
+
+        logger.info("Starting dashboard containers")
+        try:
+            for container_name in container_names:
+                try:
+                    container = await asyncio.to_thread(self.client.containers.get, container_name)
+                    await asyncio.to_thread(container.start)
+                    logger.debug(f"Started {container_name}")
+                except docker.errors.NotFound:
+                    logger.debug(f"Container {container_name} not found, skipping start")
+                except Exception as e:
+                    logger.warning(f"Failed to start {container_name}: {e}")
+        except Exception as e:
+            raise DockerClientError(f"Failed to start dashboard containers: {e}") from e

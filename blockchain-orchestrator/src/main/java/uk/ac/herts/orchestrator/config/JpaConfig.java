@@ -24,11 +24,6 @@ public class JpaConfig {
         return DataSourceBuilder.create().build();
     }
 
-//    @Bean
-//    public LocalContainerEntityManagerFactoryBean entityManagerFactory(EntityManagerFactoryBuilder builder, DataSource dataSource) {
-//        return builder.dataSource(dataSource).build();
-//    }
-
     @Bean
     public PlatformTransactionManager transactionManager(EntityManagerFactory entityManagerFactory) {
         return new JpaTransactionManager(entityManagerFactory);

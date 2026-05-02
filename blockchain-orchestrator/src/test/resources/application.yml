@@ -8,7 +8,6 @@ spring:
       init:
         mode: ${DB_INIT_MODE:always}
         schema-locations: classpath:schema.sql
-        script-location: classpath:data.sql
 
   hardhat:
     rpc-url: ${HARDHAT_RPC_URL:http://127.0.0.1:8545}

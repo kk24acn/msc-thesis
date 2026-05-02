@@ -2,8 +2,9 @@ package uk.ac.herts.orchestrator.repository.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import uk.ac.herts.orchestrator.repository.model.TransactionStatus;
+
 import org.web3j.protocol.core.methods.response.TransactionReceipt;
-import uk.ac.herts.orchestrator.model.TransactionStatus;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -23,7 +24,7 @@ public class Transaction {
     @Column(name = "id")
     private UUID id;
 
-    @Column(name = "to_address")
+    @Column(name = "to_address", length = 50)
     private String toAddress;
 
     @Column(name = "amount_ether")
@@ -33,10 +34,10 @@ public class Transaction {
     @Enumerated(EnumType.STRING)
     private TransactionStatus status;
 
-    @Column(name = "transaction_hash")
+    @Column(name = "transaction_hash", length = 100)
     private String transactionHash;
 
-    @Column(name = "error_message")
+    @Column(name = "error_message", length = 1000)
     private String errorMessage;
 
     @Column(name = "retry_count")
@@ -48,7 +49,7 @@ public class Transaction {
     @Column(name = "updated_at")
     private OffsetDateTime updatedAt;
 
-    @Column(name = "signedHexPayload")
+    @Column(name = "signed_hex_payload")
     private String signedHexPayload;
 
     @Version

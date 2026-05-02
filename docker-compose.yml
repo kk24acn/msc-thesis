@@ -111,20 +111,11 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - SPRING_PROFILES_ACTIVE=servlet
       - DB_JDBC_URL=jdbc:postgresql://postgres:5432/orchestrator
+      - DB_USERNAME=kapellmeister
+      - DB_PASSWORD=bach
       - HARDHAT_RPC_URL=http://hardhat:8545
       - SIGNER_RPC_URLS=faultlab-proxy-1:50051,faultlab-proxy-2:50051,faultlab-proxy-3:50051
-      # - SIGNER_RPC_URLS=signer-1:50051,signer-2:50051,signer-3:50051
-      - SSL_KEYSTORE_LOCATION=file:/app/certs/orchestrator.p12
-      - SSL_KEYSTORE_PASS=secret
-      - SSL_KEYSTORE_TYPE=PKCS12
-      - SSL_KEY_PASS=secret
-      - SSL_TRUSTSTORE_LOCATION=file:/app/certs/ca.p12
-      - SSL_TRUSTSTORE_PASS=secret
-    volumes:
-      - ./util/certs/ca.p12:/app/certs/ca.p12
-      - ./util/certs/orchestrator/orchestrator.p12:/app/certs/orchestrator.p12
     networks:
       - signer
       - orchestrator
@@ -152,7 +143,6 @@ services:
       - "5001:5000"
     environment:
       - PYTHONUNBUFFERED=1
-      - MITMPROXY_CONFDIR=/app/.mitmproxy
     networks:
       - signer
     logging:
@@ -173,7 +163,6 @@ services:
       - "5002:5000"
     environment:
       - PYTHONUNBUFFERED=1
-      - MITMPROXY_CONFDIR=/app/.mitmproxy
     networks:
       - signer
     logging:
@@ -194,7 +183,6 @@ services:
       - "5003:5000"
     environment:
       - PYTHONUNBUFFERED=1
-      - MITMPROXY_CONFDIR=/app/.mitmproxy
     networks:
       - signer
     logging:

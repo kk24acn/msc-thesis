@@ -2,7 +2,6 @@ import asyncio
 import logging
 from typing import cast
 
-import grpc
 from grpc.aio import ServicerContext
 
 from proto import dsg_pb2
@@ -22,7 +21,7 @@ def _resolve_active_fault(fault_state: FaultState, trace_id: str, method_name: s
         return divisor > 0 and numeric_id % divisor == 0
 
     fault = fault_state.get()
-    if not fault.enabled or fault.target_method != method_name or not is_targeted(trace_id, fault.failure_rate):
+    if fault is None or fault.target_method != method_name or not is_targeted(trace_id, fault.failure_rate):
         return None
     return fault
 

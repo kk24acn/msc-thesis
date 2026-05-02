@@ -33,8 +33,10 @@ class FaultState:
         with self._lock:
             self._current_fault = fault_config
 
-    def get(self) -> FaultConfig:
+    def get(self) -> FaultConfig | None:
         with self._lock:
+            if not self._current_fault.enabled:
+                return None
             return FaultConfig(
                 enabled=self._current_fault.enabled,
                 fault_type=self._current_fault.fault_type,

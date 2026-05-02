@@ -11,7 +11,6 @@ import uk.ac.herts.orchestrator.api.dto.SubmitTransactionRequest;
 import uk.ac.herts.orchestrator.api.dto.SubmitTransactionResponse;
 import uk.ac.herts.orchestrator.service.OrchestratorService;
 
-
 @RestController
 @RequestMapping("/api/v1/transactions")
 public class OrchestratorController {
@@ -24,7 +23,7 @@ public class OrchestratorController {
     @PostMapping
     public ResponseEntity<SubmitTransactionResponse> submit(@Valid @RequestBody SubmitTransactionRequest request) {
         return new ResponseEntity<>(
-            orchestratorService.startTransaction(request),
-            HttpStatus.ACCEPTED);
+                orchestratorService.startTransaction(request),
+                HttpStatus.ACCEPTED);
     }
 }

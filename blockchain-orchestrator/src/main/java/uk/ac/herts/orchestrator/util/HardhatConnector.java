@@ -23,6 +23,9 @@ public class HardhatConnector {
     private final HardhatProperties hardhatProperties;
     private final NonceManager nonceManager;
 
+    public record SubmissionResult(EthSendTransaction transaction, int attempts) {
+    }
+
     public BigInteger fetchGasPrice() {
         try {
             BigInteger gasPrice = web3j.ethGasPrice().send().getGasPrice();
@@ -43,7 +46,7 @@ public class HardhatConnector {
         return nonce;
     }
 
-    public EthSendTransaction submitRawTransaction(String signedHexPayload, String fromAddress) {
+    public SubmissionResult submitRawTransaction(String signedHexPayload, String fromAddress) {
         log.info("Starting transaction submission from address: {}", fromAddress);
 
         int attempt = 0;
@@ -63,7 +66,7 @@ public class HardhatConnector {
                 log.info("Transaction submitted successfully on attempt {}. Hash: {}",
                         attempt, result.getTransactionHash());
                 nonceManager.incrementNonce(fromAddress);
-                return result;
+                return new SubmissionResult(result, attempt);
             } catch (Exception e) {
                 lastException = e;
                 if (attempt == maxRetries) {

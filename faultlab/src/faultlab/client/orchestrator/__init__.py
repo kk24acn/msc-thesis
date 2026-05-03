@@ -52,7 +52,7 @@ class OrchestratorClient:
         accounts: list[tuple[str, str]],
         count: int,
         amount_range: tuple[float, float] = DEFAULT_AMOUNT_RANGE,
-        max_concurrency: int = 50,
+        max_concurrency: int = 100,
     ) -> int:
         semaphore = asyncio.Semaphore(max_concurrency)
         tasks = []

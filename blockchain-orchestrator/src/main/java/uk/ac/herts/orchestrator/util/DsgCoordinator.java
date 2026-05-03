@@ -43,6 +43,9 @@ public class DsgCoordinator {
         this.mpcProperties = mpcProperties;
     }
 
+    public record DsgResult(byte[] signature, int attempts) {
+    }
+
     private DsgServiceGrpc.DsgServiceFutureStub getStubWithDeadline(int partyId) {
         var stub = stubs.get(partyId).withDeadlineAfter(mpcProperties.getDsg().getRequestTimeout());
         String traceId = MDC.get("traceId");
@@ -52,7 +55,7 @@ public class DsgCoordinator {
         return stub;
     }
 
-    public byte[] executeDsg(MpcKey mpcKey, byte[] messageHash) {
+    public DsgResult executeDsg(MpcKey mpcKey, byte[] messageHash) {
         log.info("Starting DSG execution for keyId={} with {} Signer Stubs", mpcKey.getKeyId(), stubs.size());
 
         int attempts = 0;
@@ -69,7 +72,7 @@ public class DsgCoordinator {
                         mpcKey.getThreshold());
                 byte[] result = processRounds(dsgSessionId, activeQuorum);
                 log.info("DSG succeeded on attempt {} with session {}", attempts, dsgSessionId);
-                return result;
+                return new DsgResult(result, attempts);
             } catch (Exception e) {
                 lastException = e;
                 log.warn("DSG attempt {} failed for session {}. Error: {} - {}",

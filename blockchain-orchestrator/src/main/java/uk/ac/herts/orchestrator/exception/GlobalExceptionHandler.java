@@ -7,10 +7,9 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import uk.ac.herts.orchestrator.api.dto.ApiErrorResponse;
 import lombok.extern.slf4j.Slf4j;
 
-@RestControllerAdvice
 @Slf4j
+@RestControllerAdvice
 public class GlobalExceptionHandler {
-
     @ExceptionHandler(TransactionSubmissionException.class)
     public ResponseEntity<ApiErrorResponse> handleSubmissionFailure(TransactionSubmissionException exception) {
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
@@ -23,6 +22,12 @@ public class GlobalExceptionHandler {
                 .body(new ApiErrorResponse("TRANSACTION_SIGNING_FAILED", exception.getMessage()));
     }
 
+    @ExceptionHandler(TransactionConfirmationException.class)
+    public ResponseEntity<ApiErrorResponse> handleNotFound(TransactionConfirmationException exception) {
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                .body(new ApiErrorResponse("TRANSACTION_CONFIRMATION_FAILED", exception.getMessage()));
+    }
+
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<ApiErrorResponse> handleIllegalState(IllegalStateException exception) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
@@ -33,18 +38,6 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleIllegalArgument(IllegalArgumentException exception) {
         return ResponseEntity.badRequest()
                 .body(new ApiErrorResponse("INVALID_REQUEST", exception.getMessage()));
-    }
-
-    @ExceptionHandler(TransactionNotFoundException.class)
-    public ResponseEntity<ApiErrorResponse> handleNotFound(TransactionNotFoundException exception) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(new ApiErrorResponse("TRANSACTION_NOT_FOUND", exception.getMessage()));
-    }
-
-    @ExceptionHandler(ReceiptNotFoundException.class)
-    public ResponseEntity<ApiErrorResponse> handleReceiptNotFound(ReceiptNotFoundException exception) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(new ApiErrorResponse("RECEIPT_NOT_FOUND", exception.getMessage()));
     }
 
     @ExceptionHandler(Exception.class)

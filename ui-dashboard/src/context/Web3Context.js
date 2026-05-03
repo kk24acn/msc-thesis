@@ -26,7 +26,6 @@ export const Web3Provider = ({ children }) => {
         if (!provider) return;
 
         try {
-            // Fetch MPC accounts from PostgREST
             const postgrestUrl = process.env.REACT_APP_POSTGREST_URL || 'http://localhost:3001';
             const mpcKeysResponse = await fetch(`${postgrestUrl}/mpc_keys`);
 
@@ -37,7 +36,6 @@ export const Web3Provider = ({ children }) => {
             const mpcKeys = await mpcKeysResponse.json();
             const addressList = mpcKeys.map(key => key.ethereum_address);
 
-            // Create metadata mapping for quick lookup
             const metadata = {};
             mpcKeys.forEach(key => {
                 metadata[key.ethereum_address] = {
@@ -49,7 +47,6 @@ export const Web3Provider = ({ children }) => {
             });
             setMpcKeyMetadata(metadata);
 
-            // Fetch balances and nonces for MPC addresses
             const signersBalances = await Promise.all(
                 addressList.map(async (address) => {
                     const [balance, nonce] = await Promise.all([
@@ -66,7 +63,6 @@ export const Web3Provider = ({ children }) => {
             );
             setSigners(signersBalances);
 
-            // Fetch default hardhat funder accounts
             const allAccounts = await provider.listAccounts();
             const mpcAddresses = new Set(addressList);
             const funderList = allAccounts.filter(addr => !mpcAddresses.has(addr));

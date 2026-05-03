@@ -14,7 +14,7 @@ const LogsPanel = ({ logs }) => {
           logs.map((log, idx) => (
             <div key={`${log.timestamp}-${idx}`} className="log-line">
               <span className="log-timestamp">{log.timestamp}</span>
-              <span className={`log-level ${log.level}`}>{log.level.toUpperCase()}</span>
+              <span className={`log-level ${log.level}`}>[{log.level.toUpperCase()}]</span>
               <span className="log-message">{log.message}</span>
             </div>
           ))
@@ -50,6 +50,9 @@ const TransactionDetails = ({ transaction }) => {
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
+                      {stage.timing && (
+                        <span className="text-xs text-darcula-muted font-mono">{stage.timing}</span>
+                      )}
                       {statusIcons[safeStatus]}
                     </div>
                   </div>
@@ -60,24 +63,12 @@ const TransactionDetails = ({ transaction }) => {
             <div className="mt-4 p-4 card-base">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="label-xs">Started</p>
-                  <p className="value-mono">
-                    {transaction.startTime ? transaction.startTime.toLocaleTimeString() : '--'}
-                  </p>
-                </div>
-                <div>
                   <p className="label-xs">Duration</p>
                   <p className="value-mono">{transaction.duration}</p>
                 </div>
                 <div>
-                  <p className="label-xs">Progress</p>
-                  <p className="text-sm text-darcula-cyan font-mono">{transaction.progress}%</p>
-                </div>
-                <div>
-                  <p className="label-xs">Stages</p>
-                  <p className="value-mono">
-                    {transaction.stages.filter((s) => s.status === 'completed').length}/{transaction.stages.length}
-                  </p>
+                  <p className="label-xs">Trace ID</p>
+                  <p className="value-mono">{transaction.traceId || '--'}</p>
                 </div>
               </div>
             </div>

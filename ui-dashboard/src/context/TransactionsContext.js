@@ -2,6 +2,21 @@ import { createContext, useContext, useEffect, useState, useRef, useCallback } f
 
 const TransactionsContext = createContext();
 
+const formatDuration = (ms) => {
+    if (ms === null || ms === undefined || isNaN(ms) || ms < 0) return null;
+    if (ms < 1000) return `${ms}ms`;
+    return `${(ms / 1000).toFixed(1)}s`;
+};
+
+const formatTimestamp = (date) => {
+    if (!date) return '--';
+    const h = String(date.getHours()).padStart(2, '0');
+    const m = String(date.getMinutes()).padStart(2, '0');
+    const s = String(date.getSeconds()).padStart(2, '0');
+    const ms = String(date.getMilliseconds()).padStart(3, '0');
+    return `${h}:${m}:${s}.${ms}`;
+};
+
 const transformDbRecord = (dbTx) => {
     const statusUpper = dbTx.status?.toUpperCase() || '';
     const isConfirmed = statusUpper === 'CONFIRMED' || statusUpper === 'SUCCESS';
@@ -13,7 +28,12 @@ const transformDbRecord = (dbTx) => {
     else uiStatus = 'running';
 
     const startTime = new Date(dbTx.created_at);
-    const endTime = new Date(dbTx.updated_at);
+    const signedAt = dbTx.signed_at ? new Date(dbTx.signed_at) : null;
+    const submittedAt = dbTx.submitted_at ? new Date(dbTx.submitted_at) : null;
+    const confirmedAt = dbTx.confirmed_at ? new Date(dbTx.confirmed_at) : null;
+    const failedAt = dbTx.failed_at ? new Date(dbTx.failed_at) : null;
+
+    const endTime = confirmedAt || failedAt || new Date(dbTx.updated_at);
     const durationMs = endTime - startTime;
     const durationStr = durationMs > 0 ? `${(durationMs / 1000).toFixed(1)}s` : '--';
 
@@ -28,32 +48,64 @@ const transformDbRecord = (dbTx) => {
         ? `${dbTx.to_address.substring(0, 6)}...${dbTx.to_address.substring(38)}`
         : 'Unknown';
 
+    const signedTiming = signedAt ? formatDuration(signedAt - startTime) : null;
+    const submittedTiming = submittedAt && signedAt ? formatDuration(submittedAt - signedAt) : null;
+    const confirmedTiming = confirmedAt && submittedAt ? formatDuration(confirmedAt - submittedAt) : null;
+
+    const logs = [];
+
+    logs.push({ timestamp: formatTimestamp(startTime), level: 'info', message: 'Transaction created' });
+
+    if (signedAt) {
+        if (dbTx.signing_attempts > 1) {
+            logs.push({ timestamp: formatTimestamp(signedAt), level: 'warning', message: `Signing finished after ${dbTx.signing_attempts} attempts` });
+        }
+        logs.push({ timestamp: formatTimestamp(signedAt), level: 'info', message: 'Transaction signed' });
+    }
+
+    if (submittedAt) {
+        if (dbTx.submission_attempts > 1) {
+            logs.push({ timestamp: formatTimestamp(submittedAt), level: 'warning', message: `Submission finished after ${dbTx.submission_attempts} attempts` });
+        }
+        logs.push({ timestamp: formatTimestamp(submittedAt), level: 'info', message: 'Transaction submitted' });
+    }
+
+    if (confirmedAt) {
+        logs.push({ timestamp: formatTimestamp(confirmedAt), level: 'info', message: 'Transaction confirmed' });
+    }
+
+    if (dbTx.error_message && failedAt) {
+        logs.push({ timestamp: formatTimestamp(failedAt), level: 'error', message: dbTx.error_message });
+    }
+
     return {
         id: dbTx.id.split('-')[0],
+        traceId: dbTx.trace_id || null,
         name: `Transfer to ${shortAddress}`,
         description: `${dbTx.amount_ether} ETH`,
         status: uiStatus,
         stages: [
-            { name: 'New', status: 'completed' },
+            { name: 'New', status: 'completed', timing: '0ms' },
             {
                 name: 'Signed',
                 status: dbTx.signed_hex_payload ? 'completed' : (isFailed ? 'failed' : 'running'),
+                timing: signedTiming,
             },
             {
                 name: 'Submitted',
                 status: dbTx.transaction_hash ? 'completed' : (isFailed ? 'failed' : 'pending'),
+                timing: submittedTiming,
             },
             {
                 name: 'Confirmed',
                 status: isConfirmed ? 'completed' : (isFailed ? 'failed' : 'pending'),
+                timing: confirmedTiming,
             },
         ],
         duration: durationStr,
         startTime: startTime,
         progress: progress,
-        logs: dbTx.error_message
-            ? [{ timestamp: endTime.toLocaleTimeString(), level: 'error', message: dbTx.error_message }]
-            : [],
+        logs,
     };
 };
 

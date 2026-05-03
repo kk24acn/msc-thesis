@@ -40,14 +40,32 @@ public class Transaction {
     @Column(name = "error_message", length = 1000)
     private String errorMessage;
 
-    @Column(name = "retry_count")
-    private int retryCount;
+    @Column(name = "signing_attempts")
+    private Integer signingAttempts;
+
+    @Column(name = "submission_attempts")
+    private Integer submissionAttempts;
 
     @Column(name = "created_at")
     private OffsetDateTime createdAt;
 
     @Column(name = "updated_at")
     private OffsetDateTime updatedAt;
+
+    @Column(name = "signed_at")
+    private OffsetDateTime signedAt;
+
+    @Column(name = "submitted_at")
+    private OffsetDateTime submittedAt;
+
+    @Column(name = "confirmed_at")
+    private OffsetDateTime confirmedAt;
+
+    @Column(name = "failed_at")
+    private OffsetDateTime failedAt;
+
+    @Column(name = "trace_id", length = 64)
+    private String traceId;
 
     @Column(name = "signed_hex_payload")
     private String signedHexPayload;
@@ -61,9 +79,5 @@ public class Transaction {
 
     public void touchUpdatedAt() {
         this.updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
-    }
-
-    public void incrementRetryCount() {
-        this.retryCount++;
     }
 }

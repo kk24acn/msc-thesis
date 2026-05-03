@@ -328,12 +328,12 @@ body {
 
 .log-timestamp {
   color: rgb(var(--darcula-muted));
-  min-width: 85px;
+  min-width: 105px;
   flex-shrink: 0;
 }
 
 .log-level {
-  min-width: 60px;
+  min-width: 90px;
   flex-shrink: 0;
   font-weight: 600;
 }
@@ -350,7 +350,7 @@ body {
   color: rgb(var(--darcula-accent));
 }
 
-.log-level.warn {
+.log-level.warning {
   color: rgb(var(--darcula-warning));
 }
 

@@ -5,10 +5,8 @@ const TransactionsStats = ({ transactions }) => {
   const failed = transactions.filter((t) => t.status === 'failed').length;
   const finished = completed + failed;
 
-  // Calculate success rate (only for finished transactions)
   const successRate = finished > 0 ? ((completed / finished) * 100).toFixed(1) : 0;
 
-  // Calculate mean execution time (only for completed transactions)
   let meanExecutionTime = '--';
   if (completed > 0) {
     const completedTransactions = transactions.filter((t) => t.status === 'completed');
@@ -25,7 +23,6 @@ const TransactionsStats = ({ transactions }) => {
     meanExecutionTime = meanMs > 0 ? `${(meanMs / 1000).toFixed(1)}s` : '--';
   }
 
-  // Calculate transactions per second
   let transactionsPerSecond = '--';
   if (transactions.length > 1) {
     const times = transactions

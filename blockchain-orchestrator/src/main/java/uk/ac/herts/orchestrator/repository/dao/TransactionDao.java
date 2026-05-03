@@ -13,7 +13,8 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.UUID;
 
-// TODO add retries for DB interaction
+import org.slf4j.MDC;
+
 @Component
 public class TransactionDao {
 
@@ -32,74 +33,63 @@ public class TransactionDao {
                 .status(TransactionStatus.NEW)
                 .createdAt(now)
                 .updatedAt(now)
+                .traceId(MDC.get("traceId"))
                 .build();
         return repository.save(newTransaction);
     }
 
     public Transaction markSigning(Transaction transaction) {
         transaction.setStatus(TransactionStatus.SIGNING);
-        transaction.setRetryCount(0);
-        transaction.touchUpdatedAt();
-        return repository.save(transaction);
-    }
-
-    public Transaction markSigning(Transaction transaction, boolean incrementRetryCount) {
-        transaction.setStatus(TransactionStatus.SIGNING);
-        if (incrementRetryCount) {
-            transaction.incrementRetryCount();
-        }
         transaction.touchUpdatedAt();
         return repository.save(transaction);
     }
 
     public Transaction markSigned(Transaction transaction, String hexPayload) {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         transaction.setStatus(TransactionStatus.SIGNED);
         transaction.setSignedHexPayload(hexPayload);
-        transaction.touchUpdatedAt();
+        transaction.setSignedAt(now);
+        transaction.setUpdatedAt(now);
         return repository.save(transaction);
     }
 
     public Transaction markSubmitting(Transaction transaction) {
         transaction.setStatus(TransactionStatus.SUBMITTING);
-        transaction.setRetryCount(0);
-        transaction.touchUpdatedAt();
-        return repository.save(transaction);
-    }
-
-    public Transaction markSubmitting(Transaction transaction, boolean incrementRetryCount) {
-        transaction.setStatus(TransactionStatus.SUBMITTING);
-        if (incrementRetryCount) {
-            transaction.incrementRetryCount();
-        }
         transaction.touchUpdatedAt();
         return repository.save(transaction);
     }
 
     public Transaction markSubmitted(Transaction transaction, EthSendTransaction transactionResult) {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         transaction.setStatus(TransactionStatus.SUBMITTED);
         transaction.setTransactionHash(transactionResult.getTransactionHash());
-        transaction.touchUpdatedAt();
+        transaction.setSubmittedAt(now);
+        transaction.setUpdatedAt(now);
         return repository.save(transaction);
     }
 
     public Transaction markConfirming(Transaction transaction) {
         transaction.setStatus(TransactionStatus.CONFIRMING);
-        transaction.setRetryCount(0);
         transaction.touchUpdatedAt();
         return repository.save(transaction);
     }
 
     public Transaction markConfirmed(Transaction transaction, TransactionReceipt transactionReceipt) {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         transaction.setStatus(TransactionStatus.CONFIRMED);
-        transaction.touchUpdatedAt();
+        transaction.setConfirmedAt(now);
+        transaction.setUpdatedAt(now);
         return repository.save(transaction);
     }
 
     public Transaction markFailed(Transaction transaction, String errorMessage) {
-        transaction.setStatus(TransactionStatus.FAILED);
-        transaction.setErrorMessage(errorMessage);
-        transaction.touchUpdatedAt();
-        return repository.save(transaction);
+        Transaction fresh = repository.findById(transaction.getId()).orElse(transaction);
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        fresh.setStatus(TransactionStatus.FAILED);
+        fresh.setErrorMessage(errorMessage);
+        fresh.setFailedAt(now);
+        fresh.setUpdatedAt(now);
+        return repository.save(fresh);
     }
 
 }

@@ -8,7 +8,6 @@ import org.springframework.stereotype.Service;
 import org.web3j.crypto.RawTransaction;
 import org.web3j.crypto.Sign;
 import org.web3j.crypto.TransactionEncoder;
-import org.web3j.protocol.core.methods.response.EthSendTransaction;
 import org.web3j.protocol.core.methods.response.TransactionReceipt;
 import org.web3j.utils.Convert;
 import org.web3j.utils.Numeric;
@@ -17,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import uk.ac.herts.orchestrator.api.dto.SubmitTransactionRequest;
 import uk.ac.herts.orchestrator.api.dto.SubmitTransactionResponse;
+import uk.ac.herts.orchestrator.exception.TransactionConfirmationException;
 import uk.ac.herts.orchestrator.exception.TransactionSigningException;
 import uk.ac.herts.orchestrator.exception.TransactionSubmissionException;
 import uk.ac.herts.orchestrator.repository.MpcKeyRepository;
@@ -49,8 +49,21 @@ public class OrchestratorService {
                 tx = sign(tx, mpcKey);
                 tx = submit(tx, fromAddress);
                 tx = confirm(tx);
+            } catch (TransactionSigningException e) {
+                String errorMsg = buildErrorMessage("Signing phase failed", e);
+                transactionDao.markFailed(tx, errorMsg);
+                throw e;
+            } catch (TransactionSubmissionException e) {
+                String errorMsg = buildErrorMessage("Submission phase failed", e);
+                transactionDao.markFailed(tx, errorMsg);
+                throw e;
+            } catch (TransactionConfirmationException e) {
+                String errorMsg = buildErrorMessage("Confirmation phase failed", e);
+                transactionDao.markFailed(tx, errorMsg);
+                throw e;
             } catch (Exception e) {
-                transactionDao.markFailed(tx, e.getMessage());
+                String errorMsg = buildErrorMessage("Unexpected error during transaction processing", e);
+                transactionDao.markFailed(tx, errorMsg);
                 throw e;
             }
         }
@@ -83,11 +96,12 @@ public class OrchestratorService {
 
             byte[] encoded = TransactionEncoder.encode(rawTx);
             byte[] msgHash = org.web3j.crypto.Hash.sha3(encoded);
-            byte[] sigBytes = dsgCoordinator.executeDsg(mpcKey, msgHash);
+            DsgCoordinator.DsgResult dsgResult = dsgCoordinator.executeDsg(mpcKey, msgHash);
 
-            Sign.SignatureData sigData = decodeSignature(sigBytes);
+            Sign.SignatureData sigData = decodeSignature(dsgResult.signature());
             String hexPayload = Numeric.toHexString(TransactionEncoder.encode(rawTx, sigData));
 
+            tx.setSigningAttempts(dsgResult.attempts());
             return transactionDao.markSigned(tx, hexPayload);
         } catch (TransactionSigningException e) {
             throw e;
@@ -99,9 +113,10 @@ public class OrchestratorService {
     private Transaction submit(Transaction transaction, String address) {
         transaction = transactionDao.markSubmitting(transaction);
         try {
-            EthSendTransaction result = hardhatConnector.submitRawTransaction(transaction.getSignedHexPayload(),
-                    address);
-            return transactionDao.markSubmitted(transaction, result);
+            HardhatConnector.SubmissionResult submissionResult = hardhatConnector.submitRawTransaction(
+                    transaction.getSignedHexPayload(), address);
+            transaction.setSubmissionAttempts(submissionResult.attempts());
+            return transactionDao.markSubmitted(transaction, submissionResult.transaction());
         } catch (TransactionSubmissionException e) {
             throw e;
         } catch (Exception e) {
@@ -114,10 +129,10 @@ public class OrchestratorService {
         try {
             TransactionReceipt receipt = hardhatConnector.waitForConfirmation(transaction.getTransactionHash());
             return transactionDao.markConfirmed(transaction, receipt);
-        } catch (TransactionSubmissionException e) {
+        } catch (TransactionConfirmationException e) {
             throw e;
         } catch (Exception e) {
-            throw new TransactionSubmissionException("Confirmation failed for transaction " + transaction.getId(), e);
+            throw new TransactionConfirmationException("Confirmation failed for transaction " + transaction.getId(), e);
         }
     }
 
@@ -134,6 +149,27 @@ public class OrchestratorService {
         System.arraycopy(signatureBytes, 32, s, 0, 32);
         byte v = signatureBytes[64];
         return new Sign.SignatureData(v, r, s);
+    }
+
+    private String buildErrorMessage(String phase, Exception e) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(phase).append(".");
+
+        String mainMsg = e.getMessage();
+        if (mainMsg != null && !mainMsg.isEmpty()) {
+            sb.append(" ").append(mainMsg);
+        }
+
+        Throwable cause = e.getCause();
+        if (cause != null) {
+            String causeMsg = cause.getMessage();
+            if (causeMsg != null && !causeMsg.isEmpty()) {
+                sb.append(" (Root cause: ").append(cause.getClass().getSimpleName())
+                        .append(" - ").append(causeMsg).append(")");
+            }
+        }
+
+        return sb.toString();
     }
 
 }

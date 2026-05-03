@@ -11,6 +11,11 @@ services:
     networks:
       - orchestrator
       - dashboard
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kapellmeister"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   hardhat:
     build:
@@ -34,8 +39,10 @@ services:
     networks:
       - dashboard
     depends_on:
-      - orchestrator
-      - postgres
+      postgres:
+        condition: service_healthy
+      orchestrator:
+        condition: service_healthy
 
   dashboard-ui:
     build:
@@ -51,8 +58,10 @@ services:
     networks:
       - dashboard
     depends_on:
-      - postgres
-      - hardhat
+      postgres:
+        condition: service_healthy
+      hardhat:
+        condition: service_started
 
   signer-1:
     build:
@@ -121,7 +130,7 @@ services:
       - orchestrator
     depends_on:
       postgres:
-        condition: service_started
+        condition: service_healthy
       hardhat:
         condition: service_started
       signer-1:
@@ -130,6 +139,12 @@ services:
         condition: service_started
       signer-3:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
 
   faultlab-proxy-1:
     build:

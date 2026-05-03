@@ -1,7 +1,7 @@
 import asyncio
 import grpc
 import logging
-from typing import Optional, cast
+from typing import cast
 from faultlab.proto import dkg_pb2, dkg_pb2_grpc
 from faultlab.db import MpcKeysRepository
 
@@ -15,10 +15,10 @@ class DkgClientError(Exception):
 
 
 class DkgClient:
-    def __init__(self, signer_ports: dict[int, str], db_dsn: str, derivation_path: str):
+    def __init__(self, signer_grpc_urls: list[str], db_dsn: str, derivation_path: str):
         def create_stubs() -> dict[int, dkg_pb2_grpc.DkgServiceStub]:
             stubs = {}
-            for party_id, address in signer_ports.items():
+            for party_id, address in enumerate(signer_grpc_urls):
                 try:
                     channel = grpc.insecure_channel(address)
                     stubs[party_id] = dkg_pb2_grpc.DkgServiceStub(channel)

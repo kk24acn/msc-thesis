@@ -29,7 +29,7 @@
   }
 
   .main-content {
-    @apply ml-16 lg:ml-64 min-h-screen w-full;
+    @apply ml-64 min-h-screen w-full;
   }
 
   /* Cards & Panels */

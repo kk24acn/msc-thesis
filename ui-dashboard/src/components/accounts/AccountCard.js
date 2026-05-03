@@ -14,7 +14,7 @@ const AccountCard = ({ account, onCopy, delay = 0 }) => {
                         <Bitcoin className="w-6 h-6 text-darcula-cyan" />
                     </div>
                     <div>
-                        <h3 className="font-semibold text-sm">{account.label}</h3>
+                        <h3 className="font-semibold text-sm">{account.keyId}</h3>
                         <div className="flex items-center gap-2 mt-1">
                             <span className="font-mono text-xs text-darcula-muted">{formatAddress(account.address)}</span>
                             <button

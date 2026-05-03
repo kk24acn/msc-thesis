@@ -84,7 +84,7 @@ public class DsgCoordinator {
             }
         }
 
-        throw new RuntimeException(String.format("DSG failed after %d attempts", attempts), lastException);
+        throw new RuntimeException(String.format("DSG failed after %d attempts", attempts - 1), lastException);
     }
 
     private List<Integer> initializeQuorum(String keyId, String dsgSessionId, byte[] messageHash, int threshold) {

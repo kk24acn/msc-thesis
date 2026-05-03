@@ -9,12 +9,13 @@ class Config(BaseSettings):
 
     DATABASE_URL: str = ""
     ORCHESTRATOR_URL: str = ""
+    SIGNER_GRPC_URLS: list[str] = Field(default_factory=list)
+    PROXY_CONTROL_PLANE_URLS: list[str] = Field(default_factory=list)
 
     DKG_THRESHOLD: int = 2
     DKG_TOTAL_PARTIES: int = 3
     DKG_SESSIONS: int = 10
     DKG_DERIVATION_PATH: str = "m/0"
-    SIGNER_PORTS: Dict[int, str] = Field(default_factory=dict)
 
     HARDHAT_RPC_URL: str = "http://localhost:8545"
     HARDHAT_CHAIN_ID: int = 31337

@@ -13,7 +13,7 @@ RUN mvn -q clean package -DskipTests
 FROM eclipse-temurin:25.0.2_10-jre
 
 RUN apt-get update && \
-    apt-get install -y tini && \
+    apt-get install -y tini curl && \
     rm -rf /var/lib/apt/lists/* 
 
 WORKDIR /app

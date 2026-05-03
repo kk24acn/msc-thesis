@@ -14,6 +14,7 @@ from faultlab.client.orchestrator import OrchestratorClient
 from faultlab.db.mpc_keys import MpcKeysRepository
 from faultlab.db.transactions import TransactionsRepository
 from faultlab.client.signer import DkgClient
+from faultlab.client.proxy import ProxyControlPlaneClient
 from faultlab.analysis.metrics import compute_metrics, save_metrics_csv
 
 logger = logging.getLogger(__name__)
@@ -76,13 +77,23 @@ def http_client():
 
 @pytest.fixture(scope="session")
 def orchestrator_client(http_client: httpx.AsyncClient) -> OrchestratorClient:
+    if not settings.ORCHESTRATOR_URL:
+        pytest.skip("ORCHESTRATOR_URL not configured")
+
     return OrchestratorClient(client=http_client, base_url=settings.ORCHESTRATOR_URL)
 
 
 @pytest.fixture(scope="session")
 def dkg_client() -> DkgClient:
+    if not settings.SIGNER_GRPC_URLS:
+        pytest.skip("SIGNER_GRPC_URLS not configured")
+    if not settings.DATABASE_URL:
+        pytest.skip("DATABASE_URL not configured")
+    if not settings.DKG_DERIVATION_PATH:
+        pytest.skip("DKG_DERIVATION_PATH not configured")
+
     return DkgClient(
-        signer_ports=settings.SIGNER_PORTS,
+        signer_grpc_urls=settings.SIGNER_GRPC_URLS,
         db_dsn=settings.DATABASE_URL,
         derivation_path=settings.DKG_DERIVATION_PATH,
     )
@@ -90,6 +101,13 @@ def dkg_client() -> DkgClient:
 
 @pytest.fixture(scope="session")
 def funder_client() -> FunderClient:
+    if not settings.HARDHAT_RPC_URL:
+        pytest.skip("HARDHAT_RPC_URL not configured")
+    if not settings.FUNDING_PRIVATE_KEYS:
+        pytest.skip("FUNDING_PRIVATE_KEYS not configured")
+    if not settings.HARDHAT_CHAIN_ID:
+        pytest.skip("HARDHAT_CHAIN_ID not configured")
+
     return FunderClient(
         rpc_url=settings.HARDHAT_RPC_URL,
         funder_private_keys=settings.FUNDING_PRIVATE_KEYS,
@@ -99,17 +117,43 @@ def funder_client() -> FunderClient:
 
 @pytest.fixture(scope="session")
 def docker_client() -> DockerClient:
+    if not settings.DOCKER_PROJECT_NAME:
+        pytest.skip("DOCKER_PROJECT_NAME not configured")
+
     return DockerClient(project_name=settings.DOCKER_PROJECT_NAME)
 
 
 @pytest.fixture
 def mpc_keys_repository() -> MpcKeysRepository:
+    if not settings.DATABASE_URL:
+        pytest.skip("DATABASE_URL not configured")
+
     return MpcKeysRepository(dsn=settings.DATABASE_URL)
 
 
 @pytest.fixture
 def transactions_repository() -> TransactionsRepository:
+    if not settings.DATABASE_URL:
+        pytest.skip("DATABASE_URL not configured")
+
     return TransactionsRepository(dsn=settings.DATABASE_URL)
+
+
+@pytest.fixture(scope="session")
+def proxy_client() -> ProxyControlPlaneClient:
+    if not settings.PROXY_CONTROL_PLANE_URLS:
+        pytest.skip("PROXY_CONTROL_PLANE_URLS not configured")
+
+    return ProxyControlPlaneClient(control_plane_urls=settings.PROXY_CONTROL_PLANE_URLS)
+
+
+@pytest.fixture
+def mpc_accounts(mpc_keys_repository: MpcKeysRepository) -> list[tuple[str, str]]:
+    keys_df = mpc_keys_repository.fetch_all()
+    if len(keys_df) < 1:
+        pytest.skip("No accounts found in `mpc_accounts` table")
+
+    return list(zip(keys_df["key_id"], keys_df["ethereum_address"]))
 
 
 @pytest.fixture(autouse=True)
@@ -188,10 +232,49 @@ def blockchain_refresh(
     asyncio.run(refresh())
 
 
-@pytest.fixture
-def mpc_accounts(mpc_keys_repository: MpcKeysRepository) -> list[tuple[str, str]]:
-    keys_df = mpc_keys_repository.fetch_all()
-    if len(keys_df) < 1:
-        pytest.skip("No accounts found in `mpc_accounts` table")
+@pytest.fixture(autouse=True)
+async def fault_injection(request: pytest.FixtureRequest, proxy_client: ProxyControlPlaneClient):
+    """Automatically inject faults before test if marked with @pytest.mark.inject_fault.
 
-    return list(zip(keys_df["key_id"], keys_df["ethereum_address"]))
+    Marker accepts keyword arguments:
+    - fault_type: str - Type of fault to inject
+    - target_method: str - Target method for fault
+    - failure_rate: int - Failure rate percentage (1-100)
+    - metadata: dict - Fault-specific metadata
+    """
+
+    marker: pytest.Mark = request.node.get_closest_marker("inject_fault")
+    if marker is None:
+        yield
+        return
+
+    fault_type = marker.kwargs.get("fault_type", None)
+    target_method = marker.kwargs.get("target_method", None)
+    failure_rate = marker.kwargs.get("failure_rate", 0)
+    metadata = marker.kwargs.get("metadata", {})
+
+    try:
+        if fault_type and target_method and failure_rate:
+            await proxy_client.inject_all(
+                fault_type=fault_type,
+                target_method=target_method,
+                failure_rate=failure_rate,
+                metadata=metadata,
+            )
+            logger.info(
+                f"Injected {fault_type} on proxies (method={target_method},"
+                f"rate={failure_rate}%) for test {request.node.name}"
+            )
+        else:
+            logger.info(f"Fault injection skipped (type={fault_type}, method={target_method}, rate={failure_rate}%)")
+    except Exception as e:
+        logger.error(f"Failed to inject fault for {request.node.name}: {e}")
+        raise
+
+    yield
+
+    try:
+        await proxy_client.reset_all()
+        logger.info(f"Reset faults on proxies after test {request.node.name}")
+    except Exception as e:
+        logger.error(f"Failed to reset faults after {request.node.name}: {e}")

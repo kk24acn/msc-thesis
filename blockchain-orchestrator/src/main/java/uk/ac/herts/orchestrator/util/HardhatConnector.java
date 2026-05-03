@@ -80,7 +80,7 @@ public class HardhatConnector {
         }
 
         throw new RuntimeException(String.format("Transaction submission failed after %d attempts",
-                attempt), lastException);
+                attempt - 1), lastException);
     }
 
     public TransactionReceipt waitForConfirmation(String txHash) {

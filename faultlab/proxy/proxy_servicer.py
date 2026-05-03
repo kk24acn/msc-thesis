@@ -101,6 +101,8 @@ class DsgServiceProxy(dsg_pb2_grpc.DsgServiceServicer):
     ) -> dsg_pb2.InitDsgResponse:  # type: ignore
         trace_id = self._trace_id(context)
         fault = _resolve_active_fault(self._fault_state, trace_id, "InitDsg")
+        if not fault:
+            logger.info(f"[OK] InitDsg trace={trace_id}")
 
         await _handle_pre_request_faults(fault, "InitDsg", trace_id)
         response = await self._stub.InitDsg(_corrupt_payload(request, fault, trace_id))
@@ -116,6 +118,8 @@ class DsgServiceProxy(dsg_pb2_grpc.DsgServiceServicer):
     ) -> dsg_pb2.AdvanceDsgResponse:  # type: ignore
         trace_id = self._trace_id(context)
         fault = _resolve_active_fault(self._fault_state, trace_id, "AdvanceDsg")
+        if not fault:
+            logger.info(f"[OK] AdvanceDsg trace={trace_id}")
 
         await _handle_pre_request_faults(fault, "AdvanceDsg", trace_id)
         response = await self._stub.AdvanceDsg(_corrupt_payload(request, fault, trace_id))

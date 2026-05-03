@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import math
 import random
 from decimal import Decimal
 
@@ -24,7 +25,6 @@ class OrchestratorClient:
     async def _submit_transaction_task(
         self,
         key_id: str,
-        from_address: str,
         to_address: str,
         amount: Decimal,
         semaphore: asyncio.Semaphore,
@@ -38,13 +38,12 @@ class OrchestratorClient:
 
             if not response.is_success:
                 logger.warning(
-                    f"Transaction request from key_id={key_id} failed. "
-                    f"TX: {amount} ETH | {from_address} -> {to_address}. "
+                    f"Transaction request (trace_id={trace_id}) from key_id={key_id} failed. "
                     f"Status: {response.status_code}"
                 )
             return response.is_success
         except Exception as e:
-            logger.warning(f"Transaction submission failed: {e!r}")
+            logger.warning(f"Transaction submission failed, trace_id={trace_id} - {e!r}")
             return False
 
     async def submit_transactions_batch(
@@ -56,13 +55,19 @@ class OrchestratorClient:
     ) -> int:
         semaphore = asyncio.Semaphore(max_concurrency)
         tasks = []
-        for trace_id in range(count):
-            (from_key_id, from_address), (_, to_address) = random.sample(accounts, 2)
+
+        # Build a balanced sender list: each key_id appears exactly floor(count/N)
+        # or ceil(count/N) times, then shuffle to decouple trace_id from key_id.
+        key_ids = [key_id for key_id, _ in accounts]
+        senders = (key_ids * math.ceil(count / len(key_ids)))[:count]
+        random.shuffle(senders)
+
+        for trace_id, from_key_id in enumerate(senders):
+            to_address = random.choice([addr for k, addr in accounts if k != from_key_id])
             amount = Decimal(str(round(random.uniform(amount_range[0], amount_range[1]), 6)))
             tasks.append(
                 self._submit_transaction_task(
                     from_key_id,
-                    from_address,
                     to_address,
                     amount,
                     semaphore,

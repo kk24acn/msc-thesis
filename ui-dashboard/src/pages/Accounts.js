@@ -10,17 +10,9 @@ import { useWeb3 } from '../context/Web3Context';
 const transformSignerToAccount = (signer, index) => ({
     id: index + 1,
     address: signer.address,
-    label: signer.keyId || `Account #${index + 1}`,
+    keyId: signer.keyId || `Account #${index + 1}`,
     balance: Number(signer.balance || 0),
-    change: 0,
-    status: 'active',
-    transactions: signer.nonce ?? 0,
-    lastActivity: '--',
     nonce: signer.nonce ?? 0,
-    keyId: signer.keyId,
-    derivationPath: signer.derivationPath,
-    threshold: signer.threshold,
-    totalParties: signer.totalParties,
 });
 
 const Accounts = () => {
@@ -39,8 +31,7 @@ const Accounts = () => {
         return accounts.filter(
             (acc) =>
                 acc.address.toLowerCase().includes(query) ||
-                acc.label.toLowerCase().includes(query) ||
-                acc.balance.toString().includes(query),
+                acc.keyId.toLowerCase().includes(query),
         );
     }, [accounts, search]);
 
@@ -58,14 +49,7 @@ const Accounts = () => {
         <div className="page-shell">
             <Sidebar />
             <main className="main-content">
-                <Header
-                    onMenuToggle={() => {
-                        const sidebar = document.getElementById('sidebar');
-                        sidebar?.classList.toggle('w-64');
-                        sidebar?.classList.toggle('w-16');
-                    }}
-                    title="Accounts"
-                />
+                <Header title="Accounts" />
 
                 <div className="p-6">
                     {error ? (
@@ -75,20 +59,17 @@ const Accounts = () => {
                     ) : null}
 
                     <StatsCards accounts={accounts} funderAccounts={funderAccounts} />
-
                     <FilterActions
                         count={filteredAccounts.length}
                         search={search}
                         onSearchChange={setSearch}
                     />
-
                     <AccountsGrid
                         accounts={filteredAccounts}
                         onCopy={copyAddress}
                     />
                 </div>
             </main>
-
             <Toast toast={toast} />
         </div>
     );

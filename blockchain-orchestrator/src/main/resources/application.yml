@@ -39,4 +39,4 @@ logging:
     uk.ac.herts.orchestrator.config: DEBUG
     uk.ac.herts.orchestrator.util: DEBUG
   pattern:
-    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+    console: "%d{HH:mm:ss.SSS} [%thread] [%-5level] [trace_id=%X{traceId}] %logger{36} - %msg%n"

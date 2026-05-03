@@ -10,94 +10,84 @@ import { useTransactions } from '../context/TransactionsContext';
 const ITEMS_PER_PAGE = 10;
 
 const Transactions = () => {
-  const { transactions } = useTransactions();
+    const { transactions } = useTransactions();
 
-  const [expandedId, setExpandedId] = useState(null);
-  const [activeFilter, setActiveFilter] = useState('all');
-  const [search, setSearch] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
+    const [expandedId, setExpandedId] = useState(null);
+    const [activeFilter, setActiveFilter] = useState('all');
+    const [search, setSearch] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
 
-  const filteredTransactions = useMemo(() => {
-    const query = search.toLowerCase();
-    const base = activeFilter === 'all'
-      ? transactions
-      : transactions.filter((t) => t.status === activeFilter);
+    const filteredTransactions = useMemo(() => {
+        const query = search.toLowerCase();
+        const base = activeFilter === 'all'
+            ? transactions
+            : transactions.filter((t) => t.status === activeFilter);
 
-    if (!query) return base;
+        if (!query) return base;
 
-    return base.filter(
-      (t) =>
-        t.id.toLowerCase().includes(query) ||
-        t.name.toLowerCase().includes(query) ||
-        t.description.toLowerCase().includes(query),
-    );
-  }, [transactions, activeFilter, search]);
+        return base.filter(
+            (t) => t.traceId?.toLowerCase().includes(query)
+        );
+    }, [transactions, activeFilter, search]);
 
-  const paginatedTransactions = useMemo(() => {
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    const endIndex = startIndex + ITEMS_PER_PAGE;
-    return filteredTransactions.slice(startIndex, endIndex);
-  }, [filteredTransactions, currentPage]);
+    const paginatedTransactions = useMemo(() => {
+        const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+        const endIndex = startIndex + ITEMS_PER_PAGE;
+        return filteredTransactions.slice(startIndex, endIndex);
+    }, [filteredTransactions, currentPage]);
 
-  const totalPages = Math.ceil(filteredTransactions.length / ITEMS_PER_PAGE);
+    const totalPages = Math.ceil(filteredTransactions.length / ITEMS_PER_PAGE);
 
-  const toggleExpand = (id) => setExpandedId((prev) => (prev === id ? null : id));
+    const toggleExpand = (id) => setExpandedId((prev) => (prev === id ? null : id));
 
-  const handlePageChange = (page) => {
-    setCurrentPage(page);
-    setExpandedId(null);
-  };
+    const handlePageChange = (page) => {
+        setCurrentPage(page);
+        setExpandedId(null);
+    };
 
-  const handleFilterChange = (filter) => {
-    setActiveFilter(filter);
-    setCurrentPage(1);
-    setExpandedId(null);
-  };
+    const handleFilterChange = (filter) => {
+        setActiveFilter(filter);
+        setCurrentPage(1);
+        setExpandedId(null);
+    };
 
-  const handleSearchChange = (query) => {
-    setSearch(query);
-    setCurrentPage(1);
-    setExpandedId(null);
-  };
+    const handleSearchChange = (query) => {
+        setSearch(query);
+        setCurrentPage(1);
+        setExpandedId(null);
+    };
 
-  return (
-    <div className="page-shell">
-      <Sidebar />
-      <main className="main-content">
-        <Header
-          onMenuToggle={() => {
-            const sidebar = document.getElementById('sidebar');
-            sidebar?.classList.toggle('w-64');
-            sidebar?.classList.toggle('w-16');
-          }}
-          title="Transactions"
-        />
+    return (
+        <div className="page-shell">
+            <Sidebar />
+            <main className="main-content">
+                <Header title="Transactions" />
 
-        <div className="p-6">
-          <TransactionsStats transactions={transactions} />
-          <TransactionsFilters
-            activeFilter={activeFilter}
-            onFilterChange={handleFilterChange}
-            search={search}
-            onSearchChange={handleSearchChange}
-            transactionCount={filteredTransactions.length}
-          />
-          <TransactionsTable
-            transactions={paginatedTransactions}
-            expandedId={expandedId}
-            onToggle={toggleExpand}
-          />
-          <PaginationBar
-            currentPage={currentPage}
-            totalPages={totalPages}
-            itemsShowing={paginatedTransactions.length}
-            totalItems={filteredTransactions.length}
-            onPageChange={handlePageChange}
-          />
+                <div className="p-6">
+                    <TransactionsStats transactions={transactions} />
+                    <TransactionsFilters
+                        activeFilter={activeFilter}
+                        onFilterChange={handleFilterChange}
+                        search={search}
+                        onSearchChange={handleSearchChange}
+                        transactionCount={filteredTransactions.length}
+                    />
+                    <TransactionsTable
+                        transactions={paginatedTransactions}
+                        expandedId={expandedId}
+                        onToggle={toggleExpand}
+                    />
+                    <PaginationBar
+                        currentPage={currentPage}
+                        totalPages={totalPages}
+                        itemsShowing={paginatedTransactions.length}
+                        totalItems={filteredTransactions.length}
+                        onPageChange={handlePageChange}
+                    />
+                </div>
+            </main>
         </div>
-      </main>
-    </div>
-  );
+    );
 };
 
 export default Transactions;

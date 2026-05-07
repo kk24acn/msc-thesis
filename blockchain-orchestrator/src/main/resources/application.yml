@@ -26,7 +26,7 @@ spring:
     receipt-poll-interval: ${HARDHAT_RECEIPT_POLL_INTERVAL:1s}
 
   mpc:
-    signer-addresses: ${SIGNER_RPC_URLS:127.0.0.1:50051,127.0.0.1:50051,127.0.0.1:50051}
+    signer-addresses: ${SIGNER_RPC_URLS:127.0.0.1:50051,127.0.0.1:50052,127.0.0.1:50053}
     dsg:
       max-retries: ${DSG_MAX_ATTEMPTS:3}
       request-timeout: ${DSG_REQUEST_TIMEOUT:10s}

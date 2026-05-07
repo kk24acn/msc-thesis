@@ -19,15 +19,25 @@ const Transactions = () => {
 
     const filteredTransactions = useMemo(() => {
         const query = search.toLowerCase();
-        const base = activeFilter === 'all'
+        let base = activeFilter === 'all'
             ? transactions
             : transactions.filter((t) => t.status === activeFilter);
 
-        if (!query) return base;
+        if (!query) {
+            return base.sort((a, b) => {
+                const aTrace = isNaN(parseInt(a.traceId)) ? Infinity : parseInt(a.traceId);
+                const bTrace = isNaN(parseInt(b.traceId)) ? Infinity : parseInt(b.traceId);
+                return aTrace - bTrace;
+            });
+        }
 
-        return base.filter(
-            (t) => t.traceId?.toLowerCase().includes(query)
-        );
+        return base
+            .filter((t) => t.traceId?.toLowerCase() === query)
+            .sort((a, b) => {
+                const aTrace = isNaN(parseInt(a.traceId)) ? Infinity : parseInt(a.traceId);
+                const bTrace = isNaN(parseInt(b.traceId)) ? Infinity : parseInt(b.traceId);
+                return aTrace - bTrace;
+            });
     }, [transactions, activeFilter, search]);
 
     const paginatedTransactions = useMemo(() => {

@@ -4,22 +4,22 @@ spring:
     password: password
     jdbcUrl: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE
     driverClassName: org.h2.Driver
-    sql:
-      init:
-        mode: ${DB_INIT_MODE:always}
-        schema-locations: classpath:schema.sql
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
 
   hardhat:
-    rpc-url: ${HARDHAT_RPC_URL:http://127.0.0.1:8545}
-    private-key: ${HARDHAT_PRIVATE_KEY:0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80}
-    transaction-timeout: ${HARDHAT_TX_TIMEOUT:20s}
-    max-retries: ${HARDHAT_MAX_RETRIES:3}
-    retry-backoff: ${HARDHAT_RETRY_BACKOFF:300ms}
-    receipt-poll-interval: ${HARDHAT_RECEIPT_POLL_INTERVAL:1s}
-    gas-limit: ${HARDHAT_GAS_LIMIT:21000}
-    chain-id: ${HARDHAT_CHAIN_ID:}
-    recovery-concurrency: ${HARDHAT_RECOVERY_CONCURRENCY:4}
-    recovery-interval-ms: ${HARDHAT_RECOVERY_INTERVAL_MS:30000}
+    rpc-url: http://127.0.0.1:8545
+    max-retries: 3
+    gas-limit: 21000
+    request-timeout: 10s
+    retry-backoff: 300ms
+    receipt-poll-interval: 1s
 
   mpc:
     signer-addresses: 127.0.0.1:50051,127.0.0.1:50052,127.0.0.1:50053
+    dsg:
+      max-retries: 3
+      request-timeout: 10s
+      eth-derivation-path: m/0

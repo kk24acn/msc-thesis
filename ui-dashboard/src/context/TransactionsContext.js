@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
+import { usePolling } from './PollingContext';
 
 const TransactionsContext = createContext();
 
@@ -112,8 +113,10 @@ const transformDbRecord = (dbTx) => {
 export const TransactionsProvider = ({ children }) => {
     const [transactions, setTransactions] = useState([]);
     const [error, setError] = useState(null);
+    const { isPolling } = usePolling();
 
     const fetchRef = useRef();
+    const intervalRef = useRef();
 
     const fetchTransactions = useCallback(async () => {
         try {
@@ -138,14 +141,20 @@ export const TransactionsProvider = ({ children }) => {
     useEffect(() => {
         fetchRef.current();
 
-        const interval = setInterval(() => {
-            if (fetchRef.current) {
-                fetchRef.current();
-            }
-        }, 2000);
+        if (isPolling) {
+            intervalRef.current = setInterval(() => {
+                if (fetchRef.current) {
+                    fetchRef.current();
+                }
+            }, 2000);
+        }
 
-        return () => clearInterval(interval);
-    }, []);
+        return () => {
+            if (intervalRef.current) {
+                clearInterval(intervalRef.current);
+            }
+        };
+    }, [isPolling]);
 
     return (
         <TransactionsContext.Provider value={{ transactions, error, refresh: fetchTransactions }}>

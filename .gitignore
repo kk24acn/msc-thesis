@@ -1,6 +1,5 @@
 # Folders
-_doc
-_sig
+.doc
 .github
 
 # Documents

@@ -1,10 +1,13 @@
 import { NavLink } from 'react-router-dom';
-import { Wallet, ArrowRightLeft } from 'lucide-react';
+import { Wallet, ArrowRightLeft, Zap } from 'lucide-react';
+import { usePolling } from '../../context/PollingContext';
 
 const baseLink = 'sidebar-link';
 const activeLink = 'sidebar-link-active';
 
 const Sidebar = () => {
+    const { isPolling, togglePolling } = usePolling();
+
     return (
         <aside
             id="sidebar"
@@ -27,6 +30,15 @@ const Sidebar = () => {
                     <ArrowRightLeft className="w-5 h-5" />
                     <span className="font-medium">Transactions</span>
                 </NavLink>
+
+                <button
+                    onClick={togglePolling}
+                    className={`sidebar-link w-full text-left ${isPolling ? 'text-darcula-cyan' : 'text-darcula-text-secondary'}`}
+                >
+                    <Zap className="w-5 h-5" />
+                    <span className="font-medium">Polling</span>
+                    <span className="ml-auto text-xs">{isPolling ? 'ON' : 'OFF'}</span>
+                </button>
             </nav>
         </aside>
     );

@@ -46,10 +46,13 @@ const TransactionsRow = ({
     return (
         <div className={`transaction-row ${expanded ? 'expanded' : ''}`} data-transaction-id={transaction.id}>
             <div
-                className="grid grid-cols-12 gap-4 px-6 py-4 items-center border-b border-darcula-border cursor-pointer"
+                className="grid grid-cols-11 gap-4 px-6 py-4 items-center border-b border-darcula-border cursor-pointer"
                 onClick={() => onToggle(transaction.id)}
             >
-                <div className="col-span-4">
+                <div className="col-span-1">
+                    <p className="value-mono text-sm text-darcula-cyan">{transaction.traceId}</p>
+                </div>
+                <div className="col-span-3">
                     <div className="flex items-center gap-3">
                         <ChevronRight className={`w-4 h-4 text-darcula-muted expand-icon ${expanded ? 'rotated' : ''}`} />
                         <div>
@@ -59,7 +62,7 @@ const TransactionsRow = ({
                         </div>
                     </div>
                 </div>
-                <div className="col-span-5">
+                <div className="col-span-4">
                     <PipelineStages stages={transaction.stages} />
                     <div className="progress-bar mt-2">
                         <div className="progress-fill" style={{ width: `${transaction.progress}%` }}></div>

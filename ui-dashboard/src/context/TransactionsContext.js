@@ -22,13 +22,20 @@ const transformDbRecord = (dbTx) => {
     const statusUpper = dbTx.status?.toUpperCase() || '';
     const isConfirmed = statusUpper === 'CONFIRMED' || statusUpper === 'SUCCESS';
     const isFailed = statusUpper === 'FAILED' || statusUpper === 'ERROR';
+    const isCryptoAbort = statusUpper === 'CRYPTOGRAPHIC_ABORT';
+    const isInMempool = statusUpper === 'IN_MEMPOOL';
+    const isStalled = statusUpper === 'STALLED';
 
-    let uiStatus = 'new';
+    let uiStatus = 'running';
     if (isConfirmed) uiStatus = 'completed';
+    else if (isCryptoAbort) uiStatus = 'crypto_abort';
     else if (isFailed) uiStatus = 'failed';
+    else if (isStalled) uiStatus = 'stalled';
+    else if (isInMempool) uiStatus = 'in_mempool';
     else uiStatus = 'running';
 
     const startTime = new Date(dbTx.created_at);
+    const signingStartedAt = dbTx.signing_started_at ? new Date(dbTx.signing_started_at) : null;
     const signedAt = dbTx.signed_at ? new Date(dbTx.signed_at) : null;
     const submittedAt = dbTx.submitted_at ? new Date(dbTx.submitted_at) : null;
     const confirmedAt = dbTx.confirmed_at ? new Date(dbTx.confirmed_at) : null;
@@ -42,20 +49,27 @@ const transformDbRecord = (dbTx) => {
     if (statusUpper === 'SIGNING') progress = 20;
     if (statusUpper === 'SIGNED') progress = 40;
     if (statusUpper === 'SUBMITTING') progress = 60;
-    if (statusUpper === 'SUBMITTED') progress = 80;
-    if (isFailed || isConfirmed) progress = 100;
+    if (isInMempool || isStalled) progress = 75;
+    if (isCryptoAbort || isFailed || isConfirmed) progress = 100;
 
     const shortAddress = dbTx.to_address
         ? `${dbTx.to_address.substring(0, 6)}...${dbTx.to_address.substring(38)}`
         : 'Unknown';
 
-    const signedTiming = signedAt ? formatDuration(signedAt - startTime) : null;
+    const waitTiming = signingStartedAt ? formatDuration(signingStartedAt - startTime) : null;
+    const signedTiming = signedAt
+        ? (signingStartedAt ? formatDuration(signedAt - signingStartedAt) : formatDuration(signedAt - startTime))
+        : null;
     const submittedTiming = submittedAt && signedAt ? formatDuration(submittedAt - signedAt) : null;
     const confirmedTiming = confirmedAt && submittedAt ? formatDuration(confirmedAt - submittedAt) : null;
 
     const logs = [];
 
     logs.push({ timestamp: formatTimestamp(startTime), level: 'info', message: 'Transaction created' });
+
+    if (signingStartedAt) {
+        logs.push({ timestamp: formatTimestamp(signingStartedAt), level: 'info', message: 'Signing started' });
+    }
 
     if (signedAt) {
         if (dbTx.signing_attempts > 1) {
@@ -68,7 +82,11 @@ const transformDbRecord = (dbTx) => {
         if (dbTx.submission_attempts > 1) {
             logs.push({ timestamp: formatTimestamp(submittedAt), level: 'warning', message: `Submission finished after ${dbTx.submission_attempts} attempts` });
         }
-        logs.push({ timestamp: formatTimestamp(submittedAt), level: 'info', message: 'Transaction submitted' });
+        logs.push({ timestamp: formatTimestamp(submittedAt), level: 'info', message: 'Transaction submitted to mempool' });
+    }
+
+    if (isStalled) {
+        logs.push({ timestamp: formatTimestamp(new Date(dbTx.updated_at)), level: 'warning', message: 'Transaction stalled — nonce gap detected in mempool' });
     }
 
     if (confirmedAt) {
@@ -85,21 +103,36 @@ const transformDbRecord = (dbTx) => {
         name: `Transfer to ${shortAddress}`,
         description: `${dbTx.amount_ether} ETH`,
         status: uiStatus,
+        toAddress: dbTx.to_address || null,
+        fromAddress: dbTx.from_address || null,
+        nonce: dbTx.nonce ?? null,
+        submissionBlock: dbTx.submission_block ?? null,
+        minedBlock: dbTx.mined_block ?? null,
         stages: [
             { name: 'New', status: 'completed', timing: '0ms' },
             {
+                name: 'Queued',
+                status: signingStartedAt
+                    ? 'completed'
+                    : (isFailed || isCryptoAbort) ? 'failed' : 'running',
+                timing: waitTiming,
+            },
+            {
                 name: 'Signed',
-                status: dbTx.signed_hex_payload ? 'completed' : (isFailed ? 'failed' : 'running'),
+                status: dbTx.signed_hex_payload
+                    ? 'completed'
+                    : (isCryptoAbort || isFailed) ? 'failed'
+                        : signingStartedAt ? 'running' : 'pending',
                 timing: signedTiming,
             },
             {
-                name: 'Submitted',
-                status: dbTx.transaction_hash ? 'completed' : (isFailed ? 'failed' : 'pending'),
+                name: 'In Mempool',
+                status: isConfirmed ? 'completed' : (isFailed || isCryptoAbort) ? 'failed' : isStalled ? 'stalled' : (isInMempool || dbTx.transaction_hash) ? 'in_mempool' : 'pending',
                 timing: submittedTiming,
             },
             {
                 name: 'Confirmed',
-                status: isConfirmed ? 'completed' : (isFailed ? 'failed' : 'pending'),
+                status: isConfirmed ? 'completed' : ((isFailed || isCryptoAbort) ? 'failed' : 'pending'),
                 timing: confirmedTiming,
             },
         ],

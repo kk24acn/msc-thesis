@@ -3,9 +3,8 @@ import { TrendingUp, Clock, Zap } from 'lucide-react';
 const TransactionsStats = ({ transactions }) => {
     const completed = transactions.filter((t) => t.status === 'completed').length;
     const failed = transactions.filter((t) => t.status === 'failed').length;
-    const finished = completed + failed;
 
-    const successRate = finished > 0 ? ((completed / finished) * 100).toFixed(1) : 0;
+    const successRate = transactions.length > 0 ? ((completed / transactions.length) * 100).toFixed(1) : 0;
 
     let meanExecutionTime = '--';
     if (completed > 0) {
@@ -52,7 +51,7 @@ const TransactionsStats = ({ transactions }) => {
                     <TrendingUp className="w-4 h-4 text-darcula-success" />
                 </div>
                 <p className="stat-value text-darcula-success">{successRate}%</p>
-                <p className="text-xs text-darcula-muted mt-1">({completed}/{finished})</p>
+                <p className="text-xs text-darcula-muted mt-1">({completed}/{transactions.length})</p>
             </div>
             <div className="card-bordered rounded-2xl p-4">
                 <div className="flex items-center justify-between mb-2">

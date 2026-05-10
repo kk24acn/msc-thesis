@@ -24,6 +24,9 @@ public class Transaction {
     @Column(name = "id")
     private UUID id;
 
+    @Column(name = "from_address", length = 50)
+    private String fromAddress;
+
     @Column(name = "to_address", length = 50)
     private String toAddress;
 
@@ -34,10 +37,10 @@ public class Transaction {
     @Enumerated(EnumType.STRING)
     private TransactionStatus status;
 
-    @Column(name = "transaction_hash", length = 100)
-    private String transactionHash;
+    @Column(name = "hash", length = 100)
+    private String hash;
 
-    @Column(name = "error_message", length = 1000)
+    @Column(name = "error_message", length = 4000)
     private String errorMessage;
 
     @Column(name = "signing_attempts")
@@ -45,6 +48,15 @@ public class Transaction {
 
     @Column(name = "submission_attempts")
     private Integer submissionAttempts;
+
+    @Column(name = "nonce")
+    private Long nonce;
+
+    @Column(name = "submission_block")
+    private Long submissionBlock;
+
+    @Column(name = "mined_block")
+    private Long minedBlock;
 
     @Column(name = "created_at")
     private OffsetDateTime createdAt;
@@ -54,6 +66,9 @@ public class Transaction {
 
     @Column(name = "signed_at")
     private OffsetDateTime signedAt;
+
+    @Column(name = "signing_started_at")
+    private OffsetDateTime signingStartedAt;
 
     @Column(name = "submitted_at")
     private OffsetDateTime submittedAt;

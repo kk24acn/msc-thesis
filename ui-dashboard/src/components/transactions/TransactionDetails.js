@@ -61,14 +61,35 @@ const TransactionDetails = ({ transaction }) => {
                         </div>
 
                         <div className="mt-4 p-4 card-base">
+                            <div className="mb-2">
+                                <p className="label-xs">From Address</p>
+                                <p className="value-mono text-xs break-all">{transaction.fromAddress}</p>
+                            </div>
+
+                            <div className="mb-2">
+                                <p className="label-xs">To Address</p>
+                                <p className="value-mono text-xs break-all">{transaction.toAddress}</p>
+                            </div>
+
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <p className="label-xs">Duration</p>
-                                    <p className="value-mono">{transaction.duration}</p>
+                                    <p className="label-xs">Nonce</p>
+                                    <p className="value-mono">{transaction.nonce ?? '--'}</p>
                                 </div>
                                 <div>
                                     <p className="label-xs">Trace ID</p>
                                     <p className="value-mono">{transaction.traceId || '--'}</p>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4 mt-2">
+                                <div>
+                                    <p className="label-xs">Submission Block</p>
+                                    <p className="value-mono">{transaction.submissionBlock ?? '--'}</p>
+                                </div>
+                                <div>
+                                    <p className="label-xs">Mined Block</p>
+                                    <p className="value-mono">{transaction.minedBlock ?? '--'}</p>
                                 </div>
                             </div>
                         </div>

@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { ethers } from 'ethers';
+import { usePolling } from './PollingContext';
 
 const Web3Context = createContext();
 
@@ -104,6 +105,9 @@ export const Web3Provider = ({ children }) => {
     }, [provider]);
 
     const fetchRef = useRef();
+    const intervalRef = useRef();
+    const { isPolling } = usePolling();
+
     useEffect(() => {
         fetchRef.current = fetchBlockchainData;
     }, [fetchBlockchainData]);
@@ -113,14 +117,20 @@ export const Web3Provider = ({ children }) => {
 
         fetchRef.current();
 
-        const interval = setInterval(() => {
-            if (fetchRef.current) {
-                fetchRef.current();
-            }
-        }, 2000);
+        if (isPolling) {
+            intervalRef.current = setInterval(() => {
+                if (fetchRef.current) {
+                    fetchRef.current();
+                }
+            }, 2000);
+        }
 
-        return () => clearInterval(interval);
-    }, [provider]);
+        return () => {
+            if (intervalRef.current) {
+                clearInterval(intervalRef.current);
+            }
+        };
+    }, [provider, isPolling]);
 
     return (
         <Web3Context.Provider value={{ provider, signers, mpcKeyMetadata, funderAccounts, transactions, error, refresh: fetchBlockchainData }}>

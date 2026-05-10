@@ -125,6 +125,7 @@ services:
       - DB_PASSWORD=bach
       - HARDHAT_RPC_URL=http://hardhat:8545
       - SIGNER_RPC_URLS=faultlab-proxy-1:50051,faultlab-proxy-2:50051,faultlab-proxy-3:50051
+      - GRPC_CONCURRENCY_LIMIT=50
     networks:
       - signer
       - orchestrator

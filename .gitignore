@@ -19,6 +19,7 @@ pip-log.txt
 pip-delete-this-directory.txt
 .pytest_cache/
 results
+faultlab.egg-info/
 
 # Java
 *.class

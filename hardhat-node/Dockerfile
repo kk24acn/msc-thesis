@@ -12,4 +12,4 @@ COPY . .
 
 EXPOSE 8545
 
-CMD ["node", "./node_modules/.bin/hardhat", "node", "--hostname", "0.0.0.0"]
+CMD ["node", "./node_modules/.bin/hardhat", "node", "--network", "hardhatMainnet", "--hostname", "0.0.0.0"]

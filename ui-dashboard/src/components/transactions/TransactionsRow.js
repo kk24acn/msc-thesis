@@ -3,13 +3,23 @@ import { statusIcons } from '../../util/IconMap';
 import { getSafeStatus } from '../../util/ColorMap';
 import TransactionDetails from './TransactionDetails';
 
+const statusLabels = {
+    completed: 'Completed',
+    running: 'Running',
+    failed: 'Failed',
+    crypto_abort: 'Crypto Abort',
+    in_mempool: 'In Mempool',
+    stalled: 'Stalled',
+    pending: 'Pending',
+};
+
 export const StatusBadge = ({ status }) => {
     const safeStatus = getSafeStatus(status);
 
     return (
         <span className={`status-badge ${safeStatus}`}>
             {statusIcons[safeStatus]}
-            {status}
+            {statusLabels[safeStatus] || safeStatus}
         </span>
     );
 };

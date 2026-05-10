@@ -2,13 +2,14 @@ package uk.ac.herts.orchestrator.service;
 
 import java.math.BigInteger;
 import java.math.RoundingMode;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
+import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 import org.web3j.crypto.RawTransaction;
 import org.web3j.crypto.Sign;
 import org.web3j.crypto.TransactionEncoder;
-import org.web3j.protocol.core.methods.response.TransactionReceipt;
 import org.web3j.utils.Convert;
 import org.web3j.utils.Numeric;
 
@@ -16,7 +17,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import uk.ac.herts.orchestrator.api.dto.SubmitTransactionRequest;
 import uk.ac.herts.orchestrator.api.dto.SubmitTransactionResponse;
-import uk.ac.herts.orchestrator.exception.TransactionConfirmationException;
 import uk.ac.herts.orchestrator.exception.TransactionSigningException;
 import uk.ac.herts.orchestrator.exception.TransactionSubmissionException;
 import uk.ac.herts.orchestrator.repository.MpcKeyRepository;
@@ -25,52 +25,49 @@ import uk.ac.herts.orchestrator.repository.entity.MpcKey;
 import uk.ac.herts.orchestrator.repository.entity.Transaction;
 import uk.ac.herts.orchestrator.util.DsgCoordinator;
 import uk.ac.herts.orchestrator.util.HardhatConnector;
+import uk.ac.herts.orchestrator.util.NonceManager;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class OrchestratorService {
 
-    private final ConcurrentHashMap<String, Object> addressLocks = new ConcurrentHashMap<>();
+    private final ExecutorService virtualThreadExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
     private final HardhatConnector hardhatConnector;
     private final TransactionDao transactionDao;
     private final MpcKeyRepository mpcKeyRepository;
     private final DsgCoordinator dsgCoordinator;
+    private final NonceManager nonceManager;
 
     public SubmitTransactionResponse startTransaction(SubmitTransactionRequest request) {
         MpcKey mpcKey = mpcKeyRepository.findById(request.keyId())
                 .orElseThrow(() -> new IllegalArgumentException("Invalid keyId"));
         String fromAddress = mpcKey.getEthereumAddress();
 
-        Transaction tx = transactionDao.createTransaction(request.toAddress(), request.amountEther());
-        synchronized (addressLocks.computeIfAbsent(fromAddress, k -> new Object())) {
-            try {
-                tx = sign(tx, mpcKey);
-                tx = submit(tx, fromAddress);
-                tx = confirm(tx);
-            } catch (TransactionSigningException e) {
-                String errorMsg = buildErrorMessage("Signing phase failed", e);
-                transactionDao.markFailed(tx, errorMsg);
-                throw e;
-            } catch (TransactionSubmissionException e) {
-                String errorMsg = buildErrorMessage("Submission phase failed", e);
-                transactionDao.markFailed(tx, errorMsg);
-                throw e;
-            } catch (TransactionConfirmationException e) {
-                String errorMsg = buildErrorMessage("Confirmation phase failed", e);
-                transactionDao.markFailed(tx, errorMsg);
-                throw e;
-            } catch (Exception e) {
-                String errorMsg = buildErrorMessage("Unexpected error during transaction processing", e);
-                transactionDao.markFailed(tx, errorMsg);
-                throw e;
+        Transaction tx = transactionDao.createTransaction(fromAddress, request.toAddress(), request.amountEther());
+
+        String traceId = MDC.get("traceId");
+        virtualThreadExecutor.execute(() -> {
+            if (traceId != null) {
+                MDC.put("traceId", traceId);
             }
-        }
+            try {
+                Transaction signed = sign(tx, mpcKey);
+                submitToMempool(signed, fromAddress);
+            } catch (TransactionSigningException e) {
+                transactionDao.markAborted(tx, buildErrorMessage("Signing phase failed", e));
+            } catch (TransactionSubmissionException e) {
+                transactionDao.markFailed(tx, buildErrorMessage("Submission phase failed", e));
+            } catch (Exception e) {
+                transactionDao.markFailed(tx, buildErrorMessage("Unexpected error during transaction processing", e));
+            } finally {
+                MDC.clear();
+            }
+        });
 
         return SubmitTransactionResponse.builder()
                 .transactionId(tx.getId())
-                .transactionHash(tx.getTransactionHash())
                 .toAddress(request.toAddress())
                 .amountEther(request.amountEther())
                 .status(tx.getStatus().toString())
@@ -78,9 +75,10 @@ public class OrchestratorService {
     }
 
     private Transaction sign(Transaction tx, MpcKey mpcKey) {
-        tx = transactionDao.markSigning(tx);
+        long nonce = nonceManager.getAndIncrementNonce(mpcKey.getEthereumAddress());
+        tx = transactionDao.markSigning(tx, nonce);
+
         try {
-            BigInteger nonce = hardhatConnector.getCurrentNonce(mpcKey.getEthereumAddress());
             BigInteger gasPrice = hardhatConnector.fetchGasPrice();
             BigInteger gasLimit = hardhatConnector.getGasLimit();
             BigInteger valueWei = Convert.toWei(tx.getAmountEther(), Convert.Unit.ETHER)
@@ -88,7 +86,7 @@ public class OrchestratorService {
                     .toBigInteger();
 
             RawTransaction rawTx = RawTransaction.createEtherTransaction(
-                    nonce,
+                    BigInteger.valueOf(nonce),
                     gasPrice,
                     gasLimit,
                     tx.getToAddress(),
@@ -96,7 +94,10 @@ public class OrchestratorService {
 
             byte[] encoded = TransactionEncoder.encode(rawTx);
             byte[] msgHash = org.web3j.crypto.Hash.sha3(encoded);
-            DsgCoordinator.DsgResult dsgResult = dsgCoordinator.executeDsg(mpcKey, msgHash);
+
+            Transaction signingTx = tx;
+            DsgCoordinator.DsgResult dsgResult = dsgCoordinator.executeDsg(mpcKey, msgHash,
+                    () -> transactionDao.markSigningStarted(signingTx));
 
             Sign.SignatureData sigData = decodeSignature(dsgResult.signature());
             String hexPayload = Numeric.toHexString(TransactionEncoder.encode(rawTx, sigData));
@@ -110,29 +111,18 @@ public class OrchestratorService {
         }
     }
 
-    private Transaction submit(Transaction transaction, String address) {
+    private Transaction submitToMempool(Transaction transaction, String address) {
         transaction = transactionDao.markSubmitting(transaction);
         try {
             HardhatConnector.SubmissionResult submissionResult = hardhatConnector.submitRawTransaction(
                     transaction.getSignedHexPayload(), address);
             transaction.setSubmissionAttempts(submissionResult.attempts());
-            return transactionDao.markSubmitted(transaction, submissionResult.transaction());
+            long submissionBlock = hardhatConnector.fetchCurrentBlockNumber();
+            return transactionDao.markInMempool(transaction, submissionResult.transaction(), submissionBlock);
         } catch (TransactionSubmissionException e) {
             throw e;
         } catch (Exception e) {
             throw new TransactionSubmissionException("Submission failed for transaction " + transaction.getId(), e);
-        }
-    }
-
-    private Transaction confirm(Transaction transaction) {
-        transaction = transactionDao.markConfirming(transaction);
-        try {
-            TransactionReceipt receipt = hardhatConnector.waitForConfirmation(transaction.getTransactionHash());
-            return transactionDao.markConfirmed(transaction, receipt);
-        } catch (TransactionConfirmationException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new TransactionConfirmationException("Confirmation failed for transaction " + transaction.getId(), e);
         }
     }
 

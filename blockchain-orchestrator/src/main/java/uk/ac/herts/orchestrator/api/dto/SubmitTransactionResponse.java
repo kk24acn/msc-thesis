@@ -7,10 +7,8 @@ import java.util.UUID;
 
 @Builder
 public record SubmitTransactionResponse(
-    UUID transactionId,
-    String transactionHash,
-    String toAddress,
-    BigDecimal amountEther,
-    String status
-) {
+        UUID transactionId,
+        String toAddress,
+        BigDecimal amountEther,
+        String status) {
 }

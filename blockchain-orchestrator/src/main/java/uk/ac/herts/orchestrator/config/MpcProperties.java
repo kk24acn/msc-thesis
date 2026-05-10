@@ -17,6 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 @Configuration
 @ConfigurationProperties(prefix = "spring.mpc")
 public class MpcProperties {
+    private int grpcConcurrencyLimit;
     private String signerAddresses;
     private DsgProperties dsg = new DsgProperties();
 

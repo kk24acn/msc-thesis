@@ -21,7 +21,6 @@ public class HardhatConnector {
 
     private final Web3j web3j;
     private final HardhatProperties hardhatProperties;
-    private final NonceManager nonceManager;
 
     public record SubmissionResult(EthSendTransaction transaction, int attempts) {
     }
@@ -36,14 +35,16 @@ public class HardhatConnector {
         }
     }
 
-    public BigInteger getGasLimit() {
-        return BigInteger.valueOf(hardhatProperties.getGasLimit());
+    public long fetchCurrentBlockNumber() {
+        try {
+            return web3j.ethBlockNumber().send().getBlockNumber().longValue();
+        } catch (IOException e) {
+            throw new RuntimeException("Block number fetch failed", e);
+        }
     }
 
-    public BigInteger getCurrentNonce(String address) {
-        BigInteger nonce = nonceManager.getCurrentNonce(address);
-        log.debug("Current nonce for address {}: {}", address, nonce);
-        return nonce;
+    public BigInteger getGasLimit() {
+        return BigInteger.valueOf(hardhatProperties.getGasLimit());
     }
 
     public SubmissionResult submitRawTransaction(String signedHexPayload, String fromAddress) {
@@ -65,7 +66,6 @@ public class HardhatConnector {
                 }
                 log.info("Transaction submitted successfully on attempt {}. Hash: {}",
                         attempt, result.getTransactionHash());
-                nonceManager.incrementNonce(fromAddress);
                 return new SubmissionResult(result, attempt);
             } catch (Exception e) {
                 lastException = e;

@@ -8,7 +8,7 @@ RUN mvn -q -DskipTests dependency:go-offline
 
 COPY src src
 COPY --from=shared_proto dsg.proto ./src/main/proto/dsg.proto
-RUN mvn -q clean package -DskipTests
+RUN mvn -q clean package
 
 FROM eclipse-temurin:25.0.2_10-jre
 

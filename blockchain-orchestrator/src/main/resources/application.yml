@@ -1,4 +1,11 @@
 spring:
+  threads:
+    virtual:
+      enabled: true
+  task:
+    scheduling:
+      shutdown:
+        await-termination: true
   application:
     name: blockchain-orchestrator
   main:
@@ -24,19 +31,12 @@ spring:
     request-timeout: ${HARDHAT_REQUEST_TIMEOUT:10s}
     retry-backoff: ${HARDHAT_RETRY_BACKOFF:300ms}
     receipt-poll-interval: ${HARDHAT_RECEIPT_POLL_INTERVAL:1s}
+    block-indexer-interval: ${HARDHAT_BLOCK_INDEXER_INTERVAL:1000}
 
   mpc:
+    grpc-concurrency-limit: ${GRPC_CONCURRENCY_LIMIT:100}
     signer-addresses: ${SIGNER_RPC_URLS:127.0.0.1:50051,127.0.0.1:50052,127.0.0.1:50053}
     dsg:
       max-retries: ${DSG_MAX_ATTEMPTS:3}
       request-timeout: ${DSG_REQUEST_TIMEOUT:10s}
       eth-derivation-path: ${DSG_ETH_DERIVATION_PATH:m/0}
-
-logging:
-  level:
-    root: INFO
-    uk.ac.herts.orchestrator: DEBUG
-    uk.ac.herts.orchestrator.config: DEBUG
-    uk.ac.herts.orchestrator.util: DEBUG
-  pattern:
-    console: "%d{HH:mm:ss.SSS} [%thread] [%-5level] [trace_id=%X{traceId}] %logger{36} - %msg%n"

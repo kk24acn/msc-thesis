@@ -2,7 +2,6 @@ package uk.ac.herts.orchestrator.repository.dao;
 
 import org.springframework.stereotype.Component;
 import org.web3j.protocol.core.methods.response.EthSendTransaction;
-import org.web3j.protocol.core.methods.response.TransactionReceipt;
 
 import uk.ac.herts.orchestrator.repository.TransactionRepository;
 import uk.ac.herts.orchestrator.repository.entity.Transaction;
@@ -11,6 +10,8 @@ import uk.ac.herts.orchestrator.repository.model.TransactionStatus;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.slf4j.MDC;
@@ -24,10 +25,11 @@ public class TransactionDao {
         this.repository = repository;
     }
 
-    public Transaction createTransaction(String toAddress, BigDecimal amountEther) {
+    public Transaction createTransaction(String fromAddress, String toAddress, BigDecimal amountEther) {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         Transaction newTransaction = Transaction.builder()
                 .id(UUID.randomUUID())
+                .fromAddress(fromAddress)
                 .toAddress(toAddress)
                 .amountEther(amountEther)
                 .status(TransactionStatus.NEW)
@@ -38,19 +40,29 @@ public class TransactionDao {
         return repository.save(newTransaction);
     }
 
-    public Transaction markSigning(Transaction transaction) {
+    public Transaction markSigning(Transaction transaction, Long nonce) {
         transaction.setStatus(TransactionStatus.SIGNING);
+        transaction.setNonce(nonce);
         transaction.touchUpdatedAt();
         return repository.save(transaction);
     }
 
+    public Transaction markSigningStarted(Transaction transaction) {
+        Transaction fresh = repository.findById(transaction.getId()).orElse(transaction);
+        fresh.setSigningStartedAt(OffsetDateTime.now(ZoneOffset.UTC));
+        fresh.touchUpdatedAt();
+        return repository.save(fresh);
+    }
+
     public Transaction markSigned(Transaction transaction, String hexPayload) {
+        Transaction fresh = repository.findById(transaction.getId()).orElse(transaction);
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-        transaction.setStatus(TransactionStatus.SIGNED);
-        transaction.setSignedHexPayload(hexPayload);
-        transaction.setSignedAt(now);
-        transaction.setUpdatedAt(now);
-        return repository.save(transaction);
+        fresh.setStatus(TransactionStatus.SIGNED);
+        fresh.setSignedHexPayload(hexPayload);
+        fresh.setSigningAttempts(transaction.getSigningAttempts());
+        fresh.setSignedAt(now);
+        fresh.setUpdatedAt(now);
+        return repository.save(fresh);
     }
 
     public Transaction markSubmitting(Transaction transaction) {
@@ -59,26 +71,20 @@ public class TransactionDao {
         return repository.save(transaction);
     }
 
-    public Transaction markSubmitted(Transaction transaction, EthSendTransaction transactionResult) {
+    public Transaction markInMempool(Transaction transaction, EthSendTransaction transactionResult,
+            long submissionBlock) {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-        transaction.setStatus(TransactionStatus.SUBMITTED);
-        transaction.setTransactionHash(transactionResult.getTransactionHash());
+        transaction.setStatus(TransactionStatus.IN_MEMPOOL);
+        transaction.setHash(transactionResult.getTransactionHash());
+        transaction.setSubmissionBlock(submissionBlock);
         transaction.setSubmittedAt(now);
         transaction.setUpdatedAt(now);
         return repository.save(transaction);
     }
 
-    public Transaction markConfirming(Transaction transaction) {
-        transaction.setStatus(TransactionStatus.CONFIRMING);
+    public Transaction markStalled(Transaction transaction) {
+        transaction.setStatus(TransactionStatus.STALLED);
         transaction.touchUpdatedAt();
-        return repository.save(transaction);
-    }
-
-    public Transaction markConfirmed(Transaction transaction, TransactionReceipt transactionReceipt) {
-        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-        transaction.setStatus(TransactionStatus.CONFIRMED);
-        transaction.setConfirmedAt(now);
-        transaction.setUpdatedAt(now);
         return repository.save(transaction);
     }
 
@@ -90,6 +96,32 @@ public class TransactionDao {
         fresh.setFailedAt(now);
         fresh.setUpdatedAt(now);
         return repository.save(fresh);
+    }
+
+    public Transaction markAborted(Transaction transaction, String errorMessage) {
+        Transaction fresh = repository.findById(transaction.getId()).orElse(transaction);
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        fresh.setStatus(TransactionStatus.CRYPTOGRAPHIC_ABORT);
+        fresh.setErrorMessage(errorMessage);
+        fresh.setUpdatedAt(now);
+        return repository.save(fresh);
+    }
+
+    public int confirmTransactions(List<String> hashes, Long blockNumber) {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        return repository.confirmTransactions(hashes, blockNumber, now);
+    }
+
+    public Optional<Transaction> findByFromAddressAndNonce(String fromAddress, Long nonce) {
+        return repository.findByFromAddressAndNonce(fromAddress, nonce);
+    }
+
+    public List<Transaction> findLowestNonceInMempoolPerAddress() {
+        return repository.findLowestNonceInMempoolPerAddress();
+    }
+
+    public List<Transaction> findAll() {
+        return repository.findAll();
     }
 
 }

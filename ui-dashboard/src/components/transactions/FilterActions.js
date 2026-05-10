@@ -1,6 +1,16 @@
 import { Search } from 'lucide-react';
 
-const filters = ['all', 'running', 'completed', 'failed'];
+const filters = ['all', 'running', 'in_mempool', 'stalled', 'completed', 'failed', 'crypto_abort'];
+
+const filterLabels = {
+    all: 'All',
+    running: 'Running',
+    in_mempool: 'In Mempool',
+    stalled: 'Stalled',
+    completed: 'Completed',
+    failed: 'Failed',
+    crypto_abort: 'Crypto Abort',
+};
 
 const TransactionsFilters = ({ activeFilter, onFilterChange, search, onSearchChange, transactionCount = 0 }) => {
     return (
@@ -12,7 +22,7 @@ const TransactionsFilters = ({ activeFilter, onFilterChange, search, onSearchCha
                         className={`filter-tab ${activeFilter === filter ? 'active' : ''}`}
                         onClick={() => onFilterChange(filter)}
                     >
-                        {filter.charAt(0).toUpperCase() + filter.slice(1)}
+                        {filterLabels[filter]}
                     </button>
                 ))}
                 <span className="text-sm text-darcula-muted ml-2">

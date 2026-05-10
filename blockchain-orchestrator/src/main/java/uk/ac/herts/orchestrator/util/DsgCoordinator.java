@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Semaphore;
 
 import org.jspecify.annotations.NonNull;
 import org.slf4j.MDC;
@@ -37,10 +38,13 @@ import uk.ac.herts.orchestrator.repository.entity.MpcKey;
 public class DsgCoordinator {
     private final Map<Integer, DsgServiceGrpc.DsgServiceFutureStub> stubs;
     private final MpcProperties mpcProperties;
+    private final Semaphore grpcConcurrencyLimit;
 
     public DsgCoordinator(Map<Integer, DsgServiceGrpc.DsgServiceFutureStub> stubs, MpcProperties mpcProperties) {
         this.stubs = stubs;
         this.mpcProperties = mpcProperties;
+        log.info("GRPC Concurrency Limit: {}", mpcProperties.getGrpcConcurrencyLimit());
+        this.grpcConcurrencyLimit = new Semaphore(mpcProperties.getGrpcConcurrencyLimit());
     }
 
     public record DsgResult(byte[] signature, int attempts) {
@@ -55,36 +59,45 @@ public class DsgCoordinator {
         return stub;
     }
 
-    public DsgResult executeDsg(MpcKey mpcKey, byte[] messageHash) {
+    public DsgResult executeDsg(MpcKey mpcKey, byte[] messageHash, Runnable onSigningStarted) {
         log.info("Starting DSG execution for keyId={} with {} Signer Stubs", mpcKey.getKeyId(), stubs.size());
 
-        int attempts = 0;
-        int maxRetries = mpcProperties.getDsg().getMaxRetries();
-        Exception lastException = null;
+        try {
+            grpcConcurrencyLimit.acquire();
+            onSigningStarted.run();
+            int attempts = 0;
+            int maxRetries = mpcProperties.getDsg().getMaxRetries();
+            Exception lastException = null;
 
-        while (attempts++ < maxRetries) {
-            String dsgSessionId = UUID.randomUUID().toString();
-            try {
-                log.info("DSG Attempt {} (Session: {})", attempts, dsgSessionId);
-                List<Integer> activeQuorum = initializeQuorum(mpcKey.getKeyId(),
-                        dsgSessionId,
-                        messageHash,
-                        mpcKey.getThreshold());
-                byte[] result = processRounds(dsgSessionId, activeQuorum);
-                log.info("DSG succeeded on attempt {} with session {}", attempts, dsgSessionId);
-                return new DsgResult(result, attempts);
-            } catch (Exception e) {
-                lastException = e;
-                log.warn("DSG attempt {} failed for session {}. Error: {} - {}",
-                        attempts, dsgSessionId, e.getClass().getSimpleName(), e.getMessage(), e);
+            while (attempts++ < maxRetries) {
+                String dsgSessionId = UUID.randomUUID().toString();
+                try {
+                    log.info("DSG Attempt {} (Session: {})", attempts, dsgSessionId);
+                    List<Integer> activeQuorum = initializeQuorum(mpcKey.getKeyId(),
+                            dsgSessionId,
+                            messageHash,
+                            mpcKey.getThreshold());
+                    byte[] result = processRounds(dsgSessionId, activeQuorum);
+                    log.info("DSG succeeded on attempt {} with session {}", attempts, dsgSessionId);
+                    return new DsgResult(result, attempts);
+                } catch (Exception e) {
+                    lastException = e;
+                    log.warn("DSG attempt {} failed for session {}. Error: {} - {}",
+                            attempts, dsgSessionId, e.getClass().getSimpleName(), e.getMessage(), e);
 
-                if (attempts < maxRetries) {
-                    log.info("Retrying... ({}/{})", attempts, maxRetries);
+                    if (attempts < maxRetries) {
+                        log.info("Retrying... ({}/{})", attempts, maxRetries);
+                    }
                 }
             }
-        }
 
-        throw new RuntimeException(String.format("DSG failed after %d attempts", attempts - 1), lastException);
+            throw new RuntimeException(String.format("DSG failed after %d attempts", attempts - 1), lastException);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Interrupted while waiting for DSG semaphore", e);
+        } finally {
+            grpcConcurrencyLimit.release();
+        }
     }
 
     private List<Integer> initializeQuorum(String keyId, String dsgSessionId, byte[] messageHash, int threshold) {

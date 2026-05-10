@@ -9,7 +9,7 @@ micromamba create -n faultlab_env python=3.14 uv -c conda-forge
 ```sh
 LOG_REM=$RUST_LOG
 RUST_LOG=warn
-micromamba run -n faultlab_env uv pip install -r pyproject.toml
+micromamba run -n faultlab_env uv pip install -r pyproject.toml -e . --group dev
 RUST_LOG=$LOG_REM
 ```
 

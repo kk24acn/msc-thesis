@@ -23,10 +23,18 @@ export default defineConfig({
     hardhatMainnet: {
       type: "edr-simulated",
       chainType: "l1",
+      mining: {
+        auto: false,
+        interval: 1000
+      }
     },
     hardhatOp: {
       type: "edr-simulated",
       chainType: "op",
+      mining: {
+        auto: false,
+        interval: 1000
+      }
     },
     sepolia: {
       type: "http",

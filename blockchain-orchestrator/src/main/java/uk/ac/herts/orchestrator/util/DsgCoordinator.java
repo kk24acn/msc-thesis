@@ -17,16 +17,9 @@ import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.protobuf.ByteString;
 
-import io.grpc.CallOptions;
-import io.grpc.Channel;
-import io.grpc.ClientCall;
-import io.grpc.ClientInterceptor;
-import io.grpc.ForwardingClientCall;
-import io.grpc.Metadata;
-import io.grpc.MethodDescriptor;
-
 import lombok.extern.slf4j.Slf4j;
 import uk.ac.herts.orchestrator.config.MpcProperties;
+import uk.ac.herts.orchestrator.exception.DsgException;
 import uk.ac.herts.orchestrator.grpc.signer.Dsg.AdvanceDsgRequest;
 import uk.ac.herts.orchestrator.grpc.signer.Dsg.AdvanceDsgResponse;
 import uk.ac.herts.orchestrator.grpc.signer.Dsg.InitDsgRequest;
@@ -47,15 +40,13 @@ public class DsgCoordinator {
         this.grpcConcurrencyLimit = new Semaphore(mpcProperties.getGrpcConcurrencyLimit());
     }
 
-    public record DsgResult(byte[] signature, int attempts) {
+    public record DsgResult(byte[] signature, int retries) {
     }
 
-    private DsgServiceGrpc.DsgServiceFutureStub getStubWithDeadline(int partyId) {
+    private DsgServiceGrpc.DsgServiceFutureStub getStubWithDeadline(int partyId, int retry) {
         var stub = stubs.get(partyId).withDeadlineAfter(mpcProperties.getDsg().getRequestTimeout());
         String traceId = MDC.get("traceId");
-        if (traceId != null) {
-            stub = stub.withInterceptors(new TraceIdClientInterceptor(traceId));
-        }
+        stub = stub.withInterceptors(new TraceIdClientInterceptor(traceId, retry));
         return stub;
     }
 
@@ -65,33 +56,33 @@ public class DsgCoordinator {
         try {
             grpcConcurrencyLimit.acquire();
             onSigningStarted.run();
-            int attempts = 0;
-            int maxRetries = mpcProperties.getDsg().getMaxRetries();
-            Exception lastException = null;
 
-            while (attempts++ < maxRetries) {
+            int retry = 0;
+            int maxRetries = mpcProperties.getDsg().getMaxRetries();
+
+            while (true) {
                 String dsgSessionId = UUID.randomUUID().toString();
                 try {
-                    log.info("DSG Attempt {} (Session: {})", attempts, dsgSessionId);
+                    log.info("DSG attempt {}/{} (retry={}, session={})", retry + 1, maxRetries + 1, retry,
+                            dsgSessionId);
                     List<Integer> activeQuorum = initializeQuorum(mpcKey.getKeyId(),
                             dsgSessionId,
                             messageHash,
-                            mpcKey.getThreshold());
-                    byte[] result = processRounds(dsgSessionId, activeQuorum);
-                    log.info("DSG succeeded on attempt {} with session {}", attempts, dsgSessionId);
-                    return new DsgResult(result, attempts);
+                            mpcKey.getThreshold(),
+                            retry);
+                    byte[] result = processRounds(dsgSessionId, activeQuorum, retry);
+                    log.info("DSG succeeded (retry={}) with session {}", retry, dsgSessionId);
+                    return new DsgResult(result, retry);
                 } catch (Exception e) {
-                    lastException = e;
-                    log.warn("DSG attempt {} failed for session {}. Error: {} - {}",
-                            attempts, dsgSessionId, e.getClass().getSimpleName(), e.getMessage(), e);
-
-                    if (attempts < maxRetries) {
-                        log.info("Retrying... ({}/{})", attempts, maxRetries);
+                    if (retry >= maxRetries) {
+                        throw new DsgException(
+                                String.format("DSG failed after %d retries", maxRetries), maxRetries, e);
                     }
+                    log.info("DSG attempt {}/{} failed for session {}, retrying...", retry + 1, maxRetries + 1,
+                            dsgSessionId);
+                    retry++;
                 }
             }
-
-            throw new RuntimeException(String.format("DSG failed after %d attempts", attempts - 1), lastException);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new RuntimeException("Interrupted while waiting for DSG semaphore", e);
@@ -100,7 +91,8 @@ public class DsgCoordinator {
         }
     }
 
-    private List<Integer> initializeQuorum(String keyId, String dsgSessionId, byte[] messageHash, int threshold) {
+    private List<Integer> initializeQuorum(String keyId, String dsgSessionId, byte[] messageHash, int threshold,
+            int retry) {
         if (stubs.size() < threshold) {
             throw new IllegalArgumentException(
                     String.format("Not enough signers available. Threshold required %d; signers available %d",
@@ -114,7 +106,7 @@ public class DsgCoordinator {
             log.debug("Sending InitDsgRequest to Signer#{}: keyId={}, sessionId={}",
                     partyId, keyId, dsgSessionId);
 
-            CompletableFuture<Void> future = toCompletableFuture(getStubWithDeadline(partyId)
+            CompletableFuture<Void> future = toCompletableFuture(getStubWithDeadline(partyId, retry)
                     .initDsg(InitDsgRequest.newBuilder()
                             .setKeyId(keyId)
                             .setDsgSessionId(dsgSessionId)
@@ -162,7 +154,7 @@ public class DsgCoordinator {
         }
     }
 
-    private byte[] processRounds(String dsgSessionId, List<Integer> quorum) {
+    private byte[] processRounds(String dsgSessionId, List<Integer> quorum, int retry) {
         log.info("Starting DSG rounds for session: {}", dsgSessionId);
 
         List<ByteString> currentPayloads = new ArrayList<>();
@@ -173,7 +165,7 @@ public class DsgCoordinator {
 
             try {
                 List<CompletableFuture<AdvanceDsgResponse>> roundFutures = createRoundFutures(
-                        dsgSessionId, quorum, currentPayloads);
+                        dsgSessionId, quorum, currentPayloads, retry);
 
                 List<AdvanceDsgResponse> responses = roundFutures.stream()
                         .map(CompletableFuture::join)
@@ -197,12 +189,12 @@ public class DsgCoordinator {
     }
 
     private List<CompletableFuture<AdvanceDsgResponse>> createRoundFutures(String dsgSessionId, List<Integer> quorum,
-            List<ByteString> payloads) {
+            List<ByteString> payloads, int retry) {
         log.debug("Creating AdvanceDsgRequest futures for {} signers with {} payloads", quorum.size(), payloads.size());
         return quorum.stream()
                 .map(partyId -> {
                     log.debug("Sending AdvanceDsgRequest to Signer#{} (sessionId={})", partyId, dsgSessionId);
-                    return toCompletableFuture(getStubWithDeadline(partyId)
+                    return toCompletableFuture(getStubWithDeadline(partyId, retry)
                             .advanceDsg(AdvanceDsgRequest
                                     .newBuilder()
                                     .setDsgSessionId(dsgSessionId)
@@ -220,29 +212,6 @@ public class DsgCoordinator {
                             });
                 })
                 .toList();
-    }
-
-    private static final Metadata.Key<String> TRACE_ID_KEY = Metadata.Key.of("x-trace-id",
-            Metadata.ASCII_STRING_MARSHALLER);
-
-    private static class TraceIdClientInterceptor implements ClientInterceptor {
-        private final String traceId;
-
-        TraceIdClientInterceptor(String traceId) {
-            this.traceId = traceId;
-        }
-
-        @Override
-        public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
-                MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
-            return new ForwardingClientCall.SimpleForwardingClientCall<>(next.newCall(method, callOptions)) {
-                @Override
-                public void start(Listener<RespT> responseListener, Metadata headers) {
-                    headers.put(TRACE_ID_KEY, traceId);
-                    super.start(responseListener, headers);
-                }
-            };
-        }
     }
 
     private <T> CompletableFuture<T> toCompletableFuture(ListenableFuture<T> listenableFuture) {

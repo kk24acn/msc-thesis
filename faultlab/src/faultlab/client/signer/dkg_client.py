@@ -106,7 +106,7 @@ class DkgClient:
             raise DkgClientError(f"DKG session {session_id} failed: {e}") from e
 
     async def setup_keys(self, num_sessions: int, threshold: int, total_parties: int) -> int:
-        logger.debug(f"Initiating {num_sessions} DKG sessions with threshold={threshold}, total_parties={total_parties}") # fmt: skip
+        logger.info(f"Initiating {num_sessions} DKG sessions with threshold={threshold}, total_parties={total_parties}") # fmt: skip
 
         tasks = [
             asyncio.to_thread(self.setup_key, f"dkg-session-{i}", threshold, total_parties) for i in range(num_sessions)

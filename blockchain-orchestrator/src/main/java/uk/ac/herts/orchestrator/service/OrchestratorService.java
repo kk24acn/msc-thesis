@@ -17,6 +17,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import uk.ac.herts.orchestrator.api.dto.SubmitTransactionRequest;
 import uk.ac.herts.orchestrator.api.dto.SubmitTransactionResponse;
+import uk.ac.herts.orchestrator.exception.DsgException;
+import uk.ac.herts.orchestrator.exception.SubmissionException;
 import uk.ac.herts.orchestrator.exception.TransactionSigningException;
 import uk.ac.herts.orchestrator.exception.TransactionSubmissionException;
 import uk.ac.herts.orchestrator.repository.MpcKeyRepository;
@@ -74,14 +76,14 @@ public class OrchestratorService {
                 .build();
     }
 
-    private Transaction sign(Transaction tx, MpcKey mpcKey) {
+    private Transaction sign(Transaction transaction, MpcKey mpcKey) {
         long nonce = nonceManager.getAndIncrementNonce(mpcKey.getEthereumAddress());
-        tx = transactionDao.markSigning(tx, nonce);
+        transaction = transactionDao.markSigning(transaction, nonce);
 
         try {
             BigInteger gasPrice = hardhatConnector.fetchGasPrice();
             BigInteger gasLimit = hardhatConnector.getGasLimit();
-            BigInteger valueWei = Convert.toWei(tx.getAmountEther(), Convert.Unit.ETHER)
+            BigInteger valueWei = Convert.toWei(transaction.getAmountEther(), Convert.Unit.ETHER)
                     .setScale(0, RoundingMode.HALF_UP)
                     .toBigInteger();
 
@@ -89,25 +91,28 @@ public class OrchestratorService {
                     BigInteger.valueOf(nonce),
                     gasPrice,
                     gasLimit,
-                    tx.getToAddress(),
+                    transaction.getToAddress(),
                     valueWei);
 
             byte[] encoded = TransactionEncoder.encode(rawTx);
             byte[] msgHash = org.web3j.crypto.Hash.sha3(encoded);
 
-            Transaction signingTx = tx;
+            Transaction signingTx = transaction;
             DsgCoordinator.DsgResult dsgResult = dsgCoordinator.executeDsg(mpcKey, msgHash,
                     () -> transactionDao.markSigningStarted(signingTx));
 
             Sign.SignatureData sigData = decodeSignature(dsgResult.signature());
             String hexPayload = Numeric.toHexString(TransactionEncoder.encode(rawTx, sigData));
 
-            tx.setSigningAttempts(dsgResult.attempts());
-            return transactionDao.markSigned(tx, hexPayload);
-        } catch (TransactionSigningException e) {
-            throw e;
+            transaction.setSigningRetries(dsgResult.retries());
+            return transactionDao.markSigned(transaction, hexPayload);
+        } catch (DsgException e) {
+            transaction.setSigningRetries(e.getRetries());
+            throw new TransactionSigningException(
+                    String.format("Signing failed for transaction_id=%s", transaction.getId()), e);
         } catch (Exception e) {
-            throw new TransactionSigningException("Signing failed for transaction " + tx.getId(), e);
+            throw new TransactionSigningException(
+                    String.format("Signing failed for transaction_id=%s", transaction.getId()), e);
         }
     }
 
@@ -116,13 +121,16 @@ public class OrchestratorService {
         try {
             HardhatConnector.SubmissionResult submissionResult = hardhatConnector.submitRawTransaction(
                     transaction.getSignedHexPayload(), address);
-            transaction.setSubmissionAttempts(submissionResult.attempts());
+            transaction.setSubmissionRetries(submissionResult.retries());
             long submissionBlock = hardhatConnector.fetchCurrentBlockNumber();
             return transactionDao.markInMempool(transaction, submissionResult.transaction(), submissionBlock);
-        } catch (TransactionSubmissionException e) {
-            throw e;
+        } catch (SubmissionException e) {
+            transaction.setSubmissionRetries(e.getRetries());
+            throw new TransactionSubmissionException(
+                    String.format("Submission failed for transaction_id=%s", transaction.getId()), e);
         } catch (Exception e) {
-            throw new TransactionSubmissionException("Submission failed for transaction " + transaction.getId(), e);
+            throw new TransactionSubmissionException(
+                    String.format("Submission failed for transaction_id=%s", transaction.getId()), e);
         }
     }
 

@@ -59,7 +59,7 @@ public class TransactionDao {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         fresh.setStatus(TransactionStatus.SIGNED);
         fresh.setSignedHexPayload(hexPayload);
-        fresh.setSigningAttempts(transaction.getSigningAttempts());
+        fresh.setSigningRetries(transaction.getSigningRetries());
         fresh.setSignedAt(now);
         fresh.setUpdatedAt(now);
         return repository.save(fresh);
@@ -93,6 +93,7 @@ public class TransactionDao {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         fresh.setStatus(TransactionStatus.FAILED);
         fresh.setErrorMessage(errorMessage);
+        fresh.setSubmissionRetries(transaction.getSubmissionRetries());
         fresh.setFailedAt(now);
         fresh.setUpdatedAt(now);
         return repository.save(fresh);
@@ -103,6 +104,7 @@ public class TransactionDao {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         fresh.setStatus(TransactionStatus.CRYPTOGRAPHIC_ABORT);
         fresh.setErrorMessage(errorMessage);
+        fresh.setSigningRetries(transaction.getSigningRetries());
         fresh.setUpdatedAt(now);
         return repository.save(fresh);
     }

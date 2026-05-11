@@ -33,7 +33,10 @@ class OrchestratorClient:
         try:
             async with semaphore:
                 response = await self.submit_transaction(
-                    key_id=key_id, amount=amount, to_address=to_address, trace_id=trace_id
+                    key_id=key_id,
+                    amount=amount,
+                    to_address=to_address,
+                    trace_id=trace_id,
                 )
 
             if not response.is_success:

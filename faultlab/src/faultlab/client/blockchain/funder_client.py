@@ -8,7 +8,6 @@ from eth_account.signers.local import LocalAccount
 
 from faultlab.client.blockchain.blockchain_client import BlockchainClient, BlockchainClientError
 
-
 logger = logging.getLogger(__name__)
 
 

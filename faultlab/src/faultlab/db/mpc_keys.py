@@ -5,8 +5,8 @@ from faultlab.db.base import ABCRepository
 
 
 class MpcKeysRepository(ABCRepository):
-    def __init__(self, dsn: str):
-        super().__init__(dsn, "mpc_keys")
+    def __init__(self, db_url: str):
+        super().__init__(db_url, "mpc_keys")
         metadata = MetaData()
         self.mpc_keys = Table(
             "mpc_keys",

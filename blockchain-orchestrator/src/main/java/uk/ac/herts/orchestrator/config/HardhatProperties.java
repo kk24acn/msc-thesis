@@ -15,5 +15,4 @@ public class HardhatProperties {
     private Long gasLimit;
     private Duration requestTimeout;
     private Duration retryBackoff;
-    private Duration receiptPollInterval;
 }

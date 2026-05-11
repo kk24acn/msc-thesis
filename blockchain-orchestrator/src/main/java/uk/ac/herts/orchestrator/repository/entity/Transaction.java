@@ -43,11 +43,11 @@ public class Transaction {
     @Column(name = "error_message", length = 4000)
     private String errorMessage;
 
-    @Column(name = "signing_attempts")
-    private Integer signingAttempts;
+    @Column(name = "signing_retries")
+    private Integer signingRetries;
 
-    @Column(name = "submission_attempts")
-    private Integer submissionAttempts;
+    @Column(name = "submission_retries")
+    private Integer submissionRetries;
 
     @Column(name = "nonce")
     private Long nonce;

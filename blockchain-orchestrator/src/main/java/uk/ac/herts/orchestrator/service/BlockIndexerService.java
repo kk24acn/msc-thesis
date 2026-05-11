@@ -23,7 +23,7 @@ public class BlockIndexerService {
         this.transactionDao = transactionDao;
     }
 
-    @Scheduled(fixedDelayString = "${spring.hardhat.block-indexer-interval:1000}")
+    @Scheduled(fixedDelayString = "${spring.hardhat.block-indexer-interval-ms:1000}")
     public void indexBlocks() {
         try {
             BigInteger latestBlock = web3j.ethBlockNumber().send().getBlockNumber();

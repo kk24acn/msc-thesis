@@ -37,6 +37,7 @@ const transformDbRecord = (dbTx) => {
     const startTime = new Date(dbTx.created_at);
     const signingStartedAt = dbTx.signing_started_at ? new Date(dbTx.signing_started_at) : null;
     const signedAt = dbTx.signed_at ? new Date(dbTx.signed_at) : null;
+    const updatedAt = dbTx.updated_at ? new Date(dbTx.updated_at) : null;
     const submittedAt = dbTx.submitted_at ? new Date(dbTx.submitted_at) : null;
     const confirmedAt = dbTx.confirmed_at ? new Date(dbTx.confirmed_at) : null;
     const failedAt = dbTx.failed_at ? new Date(dbTx.failed_at) : null;
@@ -71,22 +72,36 @@ const transformDbRecord = (dbTx) => {
         logs.push({ timestamp: formatTimestamp(signingStartedAt), level: 'info', message: 'Signing started' });
     }
 
-    if (signedAt) {
-        if (dbTx.signing_attempts > 1) {
-            logs.push({ timestamp: formatTimestamp(signedAt), level: 'warning', message: `Signing finished after ${dbTx.signing_attempts} attempts` });
+    if (dbTx.signing_retries > 0) {
+        if (signedAt) {
+            logs.push({ timestamp: formatTimestamp(signedAt), level: 'warning', message: `Signing finished after ${dbTx.signing_retries} retries` });
+        } else {
+            logs.push({
+                timestamp: formatTimestamp(updatedAt), level: 'error', message: `Signing failed after ${dbTx.signing_retries} retries`
+            });
         }
+    }
+
+    if (signedAt) {
         logs.push({ timestamp: formatTimestamp(signedAt), level: 'info', message: 'Transaction signed' });
     }
 
-    if (submittedAt) {
-        if (dbTx.submission_attempts > 1) {
-            logs.push({ timestamp: formatTimestamp(submittedAt), level: 'warning', message: `Submission finished after ${dbTx.submission_attempts} attempts` });
+
+    if (dbTx.submission_retries > 0) {
+        if (submittedAt) {
+            logs.push({ timestamp: formatTimestamp(submittedAt), level: 'warning', message: `Submission finished after ${dbTx.submission_retries} retries` });
+        } else {
+            logs.push({ timestamp: formatTimestamp(updatedAt), level: 'error', message: `Submission failed after ${dbTx.submission_retries} retries` });
         }
+    }
+
+    if (submittedAt) {
         logs.push({ timestamp: formatTimestamp(submittedAt), level: 'info', message: 'Transaction submitted to mempool' });
     }
 
+
     if (isStalled) {
-        logs.push({ timestamp: formatTimestamp(new Date(dbTx.updated_at)), level: 'warning', message: 'Transaction stalled — nonce gap detected in mempool' });
+        logs.push({ timestamp: formatTimestamp(new Date(dbTx.updated_at)), level: 'warning', message: 'Transaction stalled — queued in mempool awaiting transactions with smaller nonce' });
     }
 
     if (confirmedAt) {

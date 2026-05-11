@@ -34,7 +34,8 @@ public class MpcGrpcStubConfig {
                             } catch (Exception e) {
                                 throw new RuntimeException(
                                         String.format("Failed to create gRPC stub for Signer#%s at %s",
-                                                node.getId(), node.getAddress()),
+                                                node.getId(),
+                                                node.getAddress()),
                                         e);
                             }
                         }));

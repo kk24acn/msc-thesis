@@ -30,13 +30,12 @@ spring:
     gas-limit: ${HARDHAT_GAS_LIMIT:21000}
     request-timeout: ${HARDHAT_REQUEST_TIMEOUT:10s}
     retry-backoff: ${HARDHAT_RETRY_BACKOFF:300ms}
-    receipt-poll-interval: ${HARDHAT_RECEIPT_POLL_INTERVAL:1s}
-    block-indexer-interval: ${HARDHAT_BLOCK_INDEXER_INTERVAL:1000}
+    block-indexer-interval-ms: ${HARDHAT_BLOCK_INDEXER_INTERVAL_MS:1000}
 
   mpc:
     grpc-concurrency-limit: ${GRPC_CONCURRENCY_LIMIT:100}
     signer-addresses: ${SIGNER_RPC_URLS:127.0.0.1:50051,127.0.0.1:50052,127.0.0.1:50053}
     dsg:
-      max-retries: ${DSG_MAX_ATTEMPTS:3}
+      max-retries: ${DSG_MAX_RETRIES:3}
       request-timeout: ${DSG_REQUEST_TIMEOUT:10s}
       eth-derivation-path: ${DSG_ETH_DERIVATION_PATH:m/0}

@@ -7,8 +7,8 @@ from faultlab.db.base import ABCRepository
 
 
 class TransactionsRepository(ABCRepository):
-    def __init__(self, dsn: str):
-        super().__init__(dsn, "transactions")
+    def __init__(self, db_url: str):
+        super().__init__(db_url, "transactions")
 
     def save(self, **kwargs) -> None:
         raise NotImplementedError("Transactions table updates are restricted from faultlab")

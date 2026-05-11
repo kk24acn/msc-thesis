@@ -46,7 +46,7 @@ public class NonceManager {
                     .send().getTransactionCount();
             return count.longValue();
         } catch (IOException e) {
-            throw new RuntimeException("Failed to fetch nonce for " + address, e);
+            throw new RuntimeException(String.format("Failed to fetch nonce for %s", address), e);
         }
     }
 }

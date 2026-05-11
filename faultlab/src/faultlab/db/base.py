@@ -5,8 +5,8 @@ from sqlalchemy import create_engine, text
 
 
 class ABCRepository(ABC):
-    def __init__(self, dsn: str, table_name: str):
-        self.engine = create_engine(dsn)
+    def __init__(self, db_url: str, table_name: str):
+        self.engine = create_engine(db_url)
         self.table_name = table_name
 
     @abstractmethod

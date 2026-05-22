@@ -8,7 +8,6 @@ import java.util.concurrent.Executors;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 import org.web3j.crypto.RawTransaction;
-import org.web3j.crypto.Sign;
 import org.web3j.crypto.TransactionEncoder;
 import org.web3j.utils.Convert;
 import org.web3j.utils.Numeric;
@@ -17,17 +16,18 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import uk.ac.herts.orchestrator.api.dto.SubmitTransactionRequest;
 import uk.ac.herts.orchestrator.api.dto.SubmitTransactionResponse;
-import uk.ac.herts.orchestrator.exception.DsgException;
-import uk.ac.herts.orchestrator.exception.SubmissionException;
+import uk.ac.herts.orchestrator.api.filter.TraceIdFilter;
+import uk.ac.herts.orchestrator.client.blockchain.BlockchainClient;
+import uk.ac.herts.orchestrator.client.blockchain.NonceManager;
+import uk.ac.herts.orchestrator.client.mpc.DsgCoordinator;
+import uk.ac.herts.orchestrator.exception.SignatureGenerationException;
+import uk.ac.herts.orchestrator.exception.BlockchainRpcException;
 import uk.ac.herts.orchestrator.exception.TransactionSigningException;
 import uk.ac.herts.orchestrator.exception.TransactionSubmissionException;
 import uk.ac.herts.orchestrator.repository.MpcKeyRepository;
 import uk.ac.herts.orchestrator.repository.dao.TransactionDao;
 import uk.ac.herts.orchestrator.repository.entity.MpcKey;
 import uk.ac.herts.orchestrator.repository.entity.Transaction;
-import uk.ac.herts.orchestrator.util.DsgCoordinator;
-import uk.ac.herts.orchestrator.util.HardhatConnector;
-import uk.ac.herts.orchestrator.util.NonceManager;
 
 @Slf4j
 @Service
@@ -36,7 +36,7 @@ public class OrchestratorService {
 
     private final ExecutorService virtualThreadExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
-    private final HardhatConnector hardhatConnector;
+    private final BlockchainClient blockchainClient;
     private final TransactionDao transactionDao;
     private final MpcKeyRepository mpcKeyRepository;
     private final DsgCoordinator dsgCoordinator;
@@ -49,16 +49,21 @@ public class OrchestratorService {
 
         Transaction tx = transactionDao.createTransaction(fromAddress, request.toAddress(), request.amountEther());
 
-        String traceId = MDC.get("traceId");
+        String traceId = MDC.get(TraceIdFilter.TRACE_ID_MDC_KEY);
         virtualThreadExecutor.execute(() -> {
             if (traceId != null) {
-                MDC.put("traceId", traceId);
+                MDC.put(TraceIdFilter.TRACE_ID_MDC_KEY, traceId);
             }
             try {
                 Transaction signed = sign(tx, mpcKey);
                 submitToMempool(signed, fromAddress);
             } catch (TransactionSigningException e) {
-                transactionDao.markAborted(tx, buildErrorMessage("Signing phase failed", e));
+                Throwable cause = e.getCause();
+                if (cause instanceof SignatureGenerationException sge && sge.isVerificationFailure()) {
+                    transactionDao.markVerificationAborted(tx, buildErrorMessage("Signing phase failed", e));
+                } else {
+                    transactionDao.markAborted(tx, buildErrorMessage("Signing phase failed", e));
+                }
             } catch (TransactionSubmissionException e) {
                 transactionDao.markFailed(tx, buildErrorMessage("Submission phase failed", e));
             } catch (Exception e) {
@@ -77,36 +82,36 @@ public class OrchestratorService {
     }
 
     private Transaction sign(Transaction transaction, MpcKey mpcKey) {
-        long nonce = nonceManager.getAndIncrementNonce(mpcKey.getEthereumAddress());
-        transaction = transactionDao.markSigning(transaction, nonce);
-
         try {
-            BigInteger gasPrice = hardhatConnector.fetchGasPrice();
-            BigInteger gasLimit = hardhatConnector.getGasLimit();
-            BigInteger valueWei = Convert.toWei(transaction.getAmountEther(), Convert.Unit.ETHER)
-                    .setScale(0, RoundingMode.HALF_UP)
-                    .toBigInteger();
+            return dsgCoordinator.executeUnderConcurrencyLimit(() -> {
+                long nonce = nonceManager.getAndIncrementNonce(mpcKey.getEthereumAddress());
+                Transaction tx = transactionDao.markSigning(transaction, nonce);
 
-            RawTransaction rawTx = RawTransaction.createEtherTransaction(
-                    BigInteger.valueOf(nonce),
-                    gasPrice,
-                    gasLimit,
-                    transaction.getToAddress(),
-                    valueWei);
+                BigInteger gasPrice = blockchainClient.fetchGasPrice();
+                BigInteger gasLimit = blockchainClient.getGasLimit();
+                BigInteger valueWei = Convert.toWei(tx.getAmountEther(), Convert.Unit.ETHER)
+                        .setScale(0, RoundingMode.HALF_UP)
+                        .toBigInteger();
 
-            byte[] encoded = TransactionEncoder.encode(rawTx);
-            byte[] msgHash = org.web3j.crypto.Hash.sha3(encoded);
+                RawTransaction rawTx = RawTransaction.createEtherTransaction(
+                        BigInteger.valueOf(nonce),
+                        gasPrice,
+                        gasLimit,
+                        tx.getToAddress(),
+                        valueWei);
 
-            Transaction signingTx = transaction;
-            DsgCoordinator.DsgResult dsgResult = dsgCoordinator.executeDsg(mpcKey, msgHash,
-                    () -> transactionDao.markSigningStarted(signingTx));
+                byte[] encoded = TransactionEncoder.encode(rawTx);
+                byte[] msgHash = org.web3j.crypto.Hash.sha3(encoded);
 
-            Sign.SignatureData sigData = decodeSignature(dsgResult.signature());
-            String hexPayload = Numeric.toHexString(TransactionEncoder.encode(rawTx, sigData));
+                transactionDao.markSigningStarted(tx);
+                DsgCoordinator.DsgResult dsgResult = dsgCoordinator.executeDsg(mpcKey, msgHash);
 
-            transaction.setSigningRetries(dsgResult.retries());
-            return transactionDao.markSigned(transaction, hexPayload);
-        } catch (DsgException e) {
+                String hexPayload = Numeric.toHexString(TransactionEncoder.encode(rawTx, dsgResult.signature()));
+
+                tx.setSigningRetries(dsgResult.retries());
+                return transactionDao.markSigned(tx, hexPayload);
+            });
+        } catch (SignatureGenerationException e) {
             transaction.setSigningRetries(e.getRetries());
             throw new TransactionSigningException(
                     String.format("Signing failed for transaction_id=%s", transaction.getId()), e);
@@ -119,12 +124,12 @@ public class OrchestratorService {
     private Transaction submitToMempool(Transaction transaction, String address) {
         transaction = transactionDao.markSubmitting(transaction);
         try {
-            HardhatConnector.SubmissionResult submissionResult = hardhatConnector.submitRawTransaction(
-                    transaction.getSignedHexPayload(), address);
+            BlockchainClient.SubmissionResult submissionResult = blockchainClient
+                    .submitRawTransaction(transaction.getSignedHexPayload(), address);
             transaction.setSubmissionRetries(submissionResult.retries());
-            long submissionBlock = hardhatConnector.fetchCurrentBlockNumber();
-            return transactionDao.markInMempool(transaction, submissionResult.transaction(), submissionBlock);
-        } catch (SubmissionException e) {
+            long submissionBlock = blockchainClient.fetchCurrentBlockNumber();
+            return transactionDao.markInMempool(transaction, submissionResult.transactionHash(), submissionBlock);
+        } catch (BlockchainRpcException e) {
             transaction.setSubmissionRetries(e.getRetries());
             throw new TransactionSubmissionException(
                     String.format("Submission failed for transaction_id=%s", transaction.getId()), e);
@@ -132,21 +137,6 @@ public class OrchestratorService {
             throw new TransactionSubmissionException(
                     String.format("Submission failed for transaction_id=%s", transaction.getId()), e);
         }
-    }
-
-    private Sign.SignatureData decodeSignature(byte[] signatureBytes) {
-        if (signatureBytes.length != 65) {
-            throw new TransactionSigningException(
-                    String.format("Signature length of %d bytes is not equal to required 65 bytes",
-                            signatureBytes.length),
-                    new IllegalArgumentException());
-        }
-        byte[] r = new byte[32];
-        byte[] s = new byte[32];
-        System.arraycopy(signatureBytes, 0, r, 0, 32);
-        System.arraycopy(signatureBytes, 32, s, 0, 32);
-        byte v = signatureBytes[64];
-        return new Sign.SignatureData(v, r, s);
     }
 
     private String buildErrorMessage(String phase, Exception e) {

@@ -8,6 +8,7 @@ const statusLabels = {
     running: 'Running',
     failed: 'Failed',
     crypto_abort: 'Crypto Abort',
+    verification_abort: 'Verification Abort',
     in_mempool: 'In Mempool',
     stalled: 'Stalled',
     pending: 'Pending',

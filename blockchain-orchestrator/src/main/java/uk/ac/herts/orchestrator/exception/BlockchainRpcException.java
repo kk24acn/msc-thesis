@@ -1,9 +1,9 @@
 package uk.ac.herts.orchestrator.exception;
 
-public class SubmissionException extends RuntimeException {
+public class BlockchainRpcException extends RuntimeException {
     private final int retries;
 
-    public SubmissionException(String message, int retries, Throwable cause) {
+    public BlockchainRpcException(String message, int retries, Throwable cause) {
         super(message, cause);
         this.retries = retries;
     }

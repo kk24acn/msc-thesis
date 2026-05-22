@@ -1,28 +1,32 @@
-package uk.ac.herts.orchestrator.util;
+package uk.ac.herts.orchestrator.client.blockchain;
 
 import java.io.IOException;
 import java.math.BigInteger;
 import java.time.Duration;
+import java.util.Collections;
+import java.util.List;
+
 import org.springframework.stereotype.Component;
 import org.web3j.protocol.Web3j;
+import org.web3j.protocol.core.DefaultBlockParameter;
+import org.web3j.protocol.core.DefaultBlockParameterName;
+import org.web3j.protocol.core.methods.response.EthBlock;
 import org.web3j.protocol.core.methods.response.EthSendTransaction;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import uk.ac.herts.orchestrator.config.HardhatProperties;
-import uk.ac.herts.orchestrator.exception.SubmissionException;
+import uk.ac.herts.orchestrator.client.blockchain.config.HardhatProperties;
+import uk.ac.herts.orchestrator.exception.BlockchainRpcException;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class HardhatConnector {
+public class HardhatBlockchainClient implements BlockchainClient {
 
     private final Web3j web3j;
     private final HardhatProperties hardhatProperties;
 
-    public record SubmissionResult(EthSendTransaction transaction, int retries) {
-    }
-
+    @Override
     public BigInteger fetchGasPrice() {
         try {
             BigInteger gasPrice = web3j.ethGasPrice().send().getGasPrice();
@@ -33,6 +37,7 @@ public class HardhatConnector {
         }
     }
 
+    @Override
     public long fetchCurrentBlockNumber() {
         try {
             return web3j.ethBlockNumber().send().getBlockNumber().longValue();
@@ -41,10 +46,23 @@ public class HardhatConnector {
         }
     }
 
+    @Override
     public BigInteger getGasLimit() {
         return BigInteger.valueOf(hardhatProperties.getGasLimit());
     }
 
+    @Override
+    public long fetchPendingTransactionCount(String address) {
+        try {
+            BigInteger count = web3j.ethGetTransactionCount(address, DefaultBlockParameterName.PENDING)
+                    .send().getTransactionCount();
+            return count.longValue();
+        } catch (IOException e) {
+            throw new RuntimeException(String.format("Failed to fetch nonce for %s", address), e);
+        }
+    }
+
+    @Override
     public SubmissionResult submitRawTransaction(String signedHexPayload, String fromAddress) {
         log.info("Starting transaction submission from address: {}", fromAddress);
 
@@ -63,10 +81,10 @@ public class HardhatConnector {
                 }
                 log.info("Transaction submitted successfully (retry={}). Hash: {}",
                         retry, result.getTransactionHash());
-                return new SubmissionResult(result, retry);
+                return new SubmissionResult(result.getTransactionHash(), retry);
             } catch (Exception e) {
                 if (retry >= maxRetries) {
-                    throw new SubmissionException(
+                    throw new BlockchainRpcException(
                             String.format("Submission failed after %d retries", maxRetries), maxRetries, e);
                 }
 
@@ -75,6 +93,25 @@ public class HardhatConnector {
                 delay = delay.multipliedBy(2);
                 retry++;
             }
+        }
+    }
+
+    @Override
+    public List<String> fetchBlockTransactionHashes(BigInteger blockNumber) {
+        try {
+            EthBlock.Block block = web3j.ethGetBlockByNumber(DefaultBlockParameter.valueOf(blockNumber), true)
+                    .send()
+                    .getBlock();
+
+            if (block == null || block.getTransactions().isEmpty()) {
+                return Collections.emptyList();
+            }
+
+            return block.getTransactions().stream()
+                    .map(tx -> ((EthBlock.TransactionObject) tx).getHash())
+                    .toList();
+        } catch (IOException e) {
+            throw new RuntimeException(String.format("Failed to fetch block %s", blockNumber), e);
         }
     }
 

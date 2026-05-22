@@ -34,28 +34,17 @@ class DsgServiceStub(object):
         Args:
             channel: A grpc.Channel.
         """
-        self.InitDsg = channel.unary_unary(
-                '/mpc.signer.DsgService/InitDsg',
-                request_serializer=proto_dot_dsg__pb2.InitDsgRequest.SerializeToString,
-                response_deserializer=proto_dot_dsg__pb2.InitDsgResponse.FromString,
-                _registered_method=True)
-        self.AdvanceDsg = channel.unary_unary(
-                '/mpc.signer.DsgService/AdvanceDsg',
-                request_serializer=proto_dot_dsg__pb2.AdvanceDsgRequest.SerializeToString,
-                response_deserializer=proto_dot_dsg__pb2.AdvanceDsgResponse.FromString,
+        self.ExecuteDsgPhase = channel.unary_unary(
+                '/mpc.signer.DsgService/ExecuteDsgPhase',
+                request_serializer=proto_dot_dsg__pb2.DsgPhaseRequest.SerializeToString,
+                response_deserializer=proto_dot_dsg__pb2.DsgPhaseResponse.FromString,
                 _registered_method=True)
 
 
 class DsgServiceServicer(object):
     """Missing associated documentation comment in .proto file."""
 
-    def InitDsg(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def AdvanceDsg(self, request, context):
+    def ExecuteDsgPhase(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -64,15 +53,10 @@ class DsgServiceServicer(object):
 
 def add_DsgServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
-            'InitDsg': grpc.unary_unary_rpc_method_handler(
-                    servicer.InitDsg,
-                    request_deserializer=proto_dot_dsg__pb2.InitDsgRequest.FromString,
-                    response_serializer=proto_dot_dsg__pb2.InitDsgResponse.SerializeToString,
-            ),
-            'AdvanceDsg': grpc.unary_unary_rpc_method_handler(
-                    servicer.AdvanceDsg,
-                    request_deserializer=proto_dot_dsg__pb2.AdvanceDsgRequest.FromString,
-                    response_serializer=proto_dot_dsg__pb2.AdvanceDsgResponse.SerializeToString,
+            'ExecuteDsgPhase': grpc.unary_unary_rpc_method_handler(
+                    servicer.ExecuteDsgPhase,
+                    request_deserializer=proto_dot_dsg__pb2.DsgPhaseRequest.FromString,
+                    response_serializer=proto_dot_dsg__pb2.DsgPhaseResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -86,7 +70,7 @@ class DsgService(object):
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
-    def InitDsg(request,
+    def ExecuteDsgPhase(request,
             target,
             options=(),
             channel_credentials=None,
@@ -99,36 +83,9 @@ class DsgService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/mpc.signer.DsgService/InitDsg',
-            proto_dot_dsg__pb2.InitDsgRequest.SerializeToString,
-            proto_dot_dsg__pb2.InitDsgResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def AdvanceDsg(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/mpc.signer.DsgService/AdvanceDsg',
-            proto_dot_dsg__pb2.AdvanceDsgRequest.SerializeToString,
-            proto_dot_dsg__pb2.AdvanceDsgResponse.FromString,
+            '/mpc.signer.DsgService/ExecuteDsgPhase',
+            proto_dot_dsg__pb2.DsgPhaseRequest.SerializeToString,
+            proto_dot_dsg__pb2.DsgPhaseResponse.FromString,
             options,
             channel_credentials,
             insecure,

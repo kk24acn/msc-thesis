@@ -1,4 +1,4 @@
-package uk.ac.herts.orchestrator.config;
+package uk.ac.herts.orchestrator.repository.config;
 
 import jakarta.persistence.EntityManagerFactory;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -12,7 +12,6 @@ import org.springframework.transaction.PlatformTransactionManager;
 
 import javax.sql.DataSource;
 
-/// / TODO Check for possible removal
 @Configuration
 @EnableJpaRepositories(basePackages = "uk.ac.herts.orchestrator.repository")
 @EntityScan(basePackages = "uk.ac.herts.orchestrator.repository.entity")

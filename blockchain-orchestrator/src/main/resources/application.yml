@@ -28,7 +28,6 @@ spring:
     rpc-url: ${HARDHAT_RPC_URL:http://127.0.0.1:8545}
     max-retries: ${HARDHAT_MAX_RETRIES:3}
     gas-limit: ${HARDHAT_GAS_LIMIT:21000}
-    request-timeout: ${HARDHAT_REQUEST_TIMEOUT:10s}
     retry-backoff: ${HARDHAT_RETRY_BACKOFF:300ms}
     block-indexer-interval-ms: ${HARDHAT_BLOCK_INDEXER_INTERVAL_MS:1000}
 

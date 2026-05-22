@@ -9,5 +9,6 @@ public enum TransactionStatus {
     CONFIRMED,
     STALLED,
     FAILED,
-    CRYPTOGRAPHIC_ABORT;
+    CRYPTOGRAPHIC_ABORT,
+    VERIFICATION_ABORT;
 }

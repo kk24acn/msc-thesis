@@ -1,4 +1,4 @@
-package uk.ac.herts.orchestrator.config;
+package uk.ac.herts.orchestrator.client.blockchain.config;
 
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;

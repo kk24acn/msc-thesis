@@ -34,12 +34,6 @@ public class GlobalExceptionHandler {
                 .body(new ApiErrorResponse("TRANSACTION_SIGNING_FAILED", exception.getMessage()));
     }
 
-    @ExceptionHandler(TransactionConfirmationException.class)
-    public ResponseEntity<ApiErrorResponse> handleNotFound(TransactionConfirmationException exception) {
-        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
-                .body(new ApiErrorResponse("TRANSACTION_CONFIRMATION_FAILED", exception.getMessage()));
-    }
-
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<ApiErrorResponse> handleIllegalState(IllegalStateException exception) {
         return ResponseEntity.status(HttpStatus.CONFLICT)

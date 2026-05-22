@@ -1,4 +1,4 @@
-package uk.ac.herts.orchestrator.util;
+package uk.ac.herts.orchestrator.client.mpc.grpc;
 
 import io.grpc.CallOptions;
 import io.grpc.Channel;

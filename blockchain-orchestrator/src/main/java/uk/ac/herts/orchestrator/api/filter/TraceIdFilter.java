@@ -1,4 +1,4 @@
-package uk.ac.herts.orchestrator.config;
+package uk.ac.herts.orchestrator.api.filter;
 
 import java.io.IOException;
 
@@ -15,7 +15,7 @@ import jakarta.servlet.http.HttpServletResponse;
 public class TraceIdFilter extends OncePerRequestFilter {
 
     private static final String TRACE_ID_HEADER = "x-trace-id";
-    private static final String TRACE_ID_MDC_KEY = "traceId";
+    public static final String TRACE_ID_MDC_KEY = "traceId";
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)

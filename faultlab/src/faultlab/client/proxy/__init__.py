@@ -1,6 +1,7 @@
 import asyncio
 import logging
-from typing import Any
+import random
+from typing import Any, Literal
 
 import httpx
 
@@ -20,60 +21,70 @@ class ProxyControlPlaneClient:
     async def _post(self, url: str, path: str, payload: dict | None = None) -> dict:
         async with httpx.AsyncClient() as client:
             response = await client.post(f"{url}{path}", json=payload or {})
-            response.raise_for_status()
+            if response.is_error:
+                body = response.json().get("message", response.text)
+                raise httpx.HTTPStatusError(body, request=response.request, response=response)
             return response.json()
 
     async def _get(self, url: str, path: str) -> dict:
         async with httpx.AsyncClient() as client:
             response = await client.get(f"{url}{path}")
-            response.raise_for_status()
+            if response.is_error:
+                body = response.json().get("message", response.text)
+                raise httpx.HTTPStatusError(body, request=response.request, response=response)
             return response.json()
+
+    async def _gather_and_verify(self, coroutines: list, urls: list[str] | None = None) -> list:
+        if urls is None:
+            urls = self._urls
+        results = await asyncio.gather(*coroutines, return_exceptions=True)
+        for url, result in zip(urls, results):
+            if isinstance(result, Exception):
+                raise ProxyControlPlaneError(f"Failed to contact {url}: {result}") from result
+        return results
 
     async def inject_all(
         self,
-        fault_type: str,
-        target_method: str,
+        fault_type: Literal["DROP_REQ", "DROP_RES", "DELAY", "MUTATE", "REPLAY"],
         failure_rate: int = 100,
-        target_service: str = "",
         metadata: dict[str, Any] | None = None,
+        rounds: list[int] | None = None,
+        signers: list[int] | int | None = None,
+        inject_until_retry: int | None = None,
     ) -> None:
-        payload = {
+        urls = self._urls
+
+        if isinstance(signers, int):  # random `n` signers
+            selected = random.sample(range(len(self._urls)), min(signers, len(self._urls)))
+            signers = [i + 1 for i in selected]  # convert to 1-based for logging
+            urls = [self._urls[i] for i in selected]
+        elif isinstance(signers, list):
+            out_of_range = [s for s in signers if s < 1 or s > len(self._urls)]
+            if out_of_range:
+                raise ProxyControlPlaneError(f"Signer indices {out_of_range} out of range (1-{len(self._urls)})")
+            urls = [self._urls[s - 1] for s in signers]
+
+        payload: dict[str, Any] = {
             "enabled": True,
             "fault_type": fault_type,
-            "target_method": target_method,
-            "target_service": target_service,
             "failure_rate": failure_rate,
             "metadata": metadata or {},
         }
-        results = await asyncio.gather(
-            *[self._post(url, "/inject", payload) for url in self._urls],
-            return_exceptions=True,
-        )
-        for url, result in zip(self._urls, results):
-            if isinstance(result, Exception):
-                raise ProxyControlPlaneError(f"Failed to inject fault on {url}: {result}") from result
+        if rounds is not None:
+            payload["rounds"] = rounds
+        if inject_until_retry is not None:
+            payload["inject_until_retry"] = inject_until_retry
 
-        logger.info(f"Injected {fault_type} on {len(self._urls)} proxies (method={target_method}, rate={failure_rate}%)") #fmt: skip
+        await self._gather_and_verify([self._post(url, "/inject", payload) for url in urls], urls=urls)
+
+        logger.info(
+            f"Injected {fault_type} on signers={signers} (rate={failure_rate}%, "
+            f"rounds={rounds}, until_retry={inject_until_retry})"
+        )
 
     async def reset_all(self) -> None:
-        results = await asyncio.gather(
-            *[self._post(url, "/reset") for url in self._urls],
-            return_exceptions=True,
-        )
-        for url, result in zip(self._urls, results):
-            if isinstance(result, Exception):
-                raise ProxyControlPlaneError(f"Failed to reset fault on {url}: {result}") from result
-
+        await self._gather_and_verify([self._post(url, "/reset") for url in self._urls])
         logger.info(f"Reset faults on {len(self._urls)} proxies")
 
     async def get_all_statuses(self) -> list[dict]:
-        results = await asyncio.gather(
-            *[self._get(url, "/status") for url in self._urls],
-            return_exceptions=True,
-        )
-        statuses = []
-        for url, result in zip(self._urls, results):
-            if isinstance(result, Exception):
-                raise ProxyControlPlaneError(f"Failed to get status from {url}: {result}") from result
-            statuses.append(result)
-        return statuses
+        return await self._gather_and_verify([self._get(url, "/status") for url in self._urls])

@@ -1,8 +1,8 @@
 package uk.ac.herts.orchestrator.repository.dao;
 
 import org.springframework.stereotype.Component;
-import org.web3j.protocol.core.methods.response.EthSendTransaction;
 
+import uk.ac.herts.orchestrator.api.filter.TraceIdFilter;
 import uk.ac.herts.orchestrator.repository.TransactionRepository;
 import uk.ac.herts.orchestrator.repository.entity.Transaction;
 import uk.ac.herts.orchestrator.repository.model.TransactionStatus;
@@ -35,7 +35,7 @@ public class TransactionDao {
                 .status(TransactionStatus.NEW)
                 .createdAt(now)
                 .updatedAt(now)
-                .traceId(MDC.get("traceId"))
+                .traceId(MDC.get(TraceIdFilter.TRACE_ID_MDC_KEY))
                 .build();
         return repository.save(newTransaction);
     }
@@ -71,11 +71,11 @@ public class TransactionDao {
         return repository.save(transaction);
     }
 
-    public Transaction markInMempool(Transaction transaction, EthSendTransaction transactionResult,
+    public Transaction markInMempool(Transaction transaction, String transactionHash,
             long submissionBlock) {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         transaction.setStatus(TransactionStatus.IN_MEMPOOL);
-        transaction.setHash(transactionResult.getTransactionHash());
+        transaction.setHash(transactionHash);
         transaction.setSubmissionBlock(submissionBlock);
         transaction.setSubmittedAt(now);
         transaction.setUpdatedAt(now);
@@ -103,6 +103,16 @@ public class TransactionDao {
         Transaction fresh = repository.findById(transaction.getId()).orElse(transaction);
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         fresh.setStatus(TransactionStatus.CRYPTOGRAPHIC_ABORT);
+        fresh.setErrorMessage(errorMessage);
+        fresh.setSigningRetries(transaction.getSigningRetries());
+        fresh.setUpdatedAt(now);
+        return repository.save(fresh);
+    }
+
+    public Transaction markVerificationAborted(Transaction transaction, String errorMessage) {
+        Transaction fresh = repository.findById(transaction.getId()).orElse(transaction);
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        fresh.setStatus(TransactionStatus.VERIFICATION_ABORT);
         fresh.setErrorMessage(errorMessage);
         fresh.setSigningRetries(transaction.getSigningRetries());
         fresh.setUpdatedAt(now);

@@ -1,6 +1,6 @@
 use crate::crypto::address::{ AddressDerivationStrategy, EthereumAddressDeriver };
 use log::debug;
-use crate::crypto::dkls23::{ DkgStateWrapper, Dkls23Engine, MpcSessionState };
+use crate::crypto::dkls23::{ DkgStateWrapper, Dkls23Engine, DsgRoundOutput, MpcSessionState };
 use crate::storage::KeyshareStore;
 use dashmap::DashMap;
 use derivation_path::DerivationPath;
@@ -19,7 +19,7 @@ pub mod mpc_proto {
 use mpc_proto::dkg_service_server::DkgService;
 use mpc_proto::{ AdvanceDkgRequest, AdvanceDkgResponse, InitDkgRequest, InitDkgResponse };
 use mpc_proto::dsg_service_server::DsgService;
-use mpc_proto::{ AdvanceDsgRequest, AdvanceDsgResponse, InitDsgRequest, InitDsgResponse };
+use mpc_proto::{ DsgPhaseRequest, DsgPhaseResponse, dsg_phase_request, dsg_phase_response };
 
 #[derive(Clone)]
 pub struct MpcNodeService {
@@ -186,81 +186,110 @@ impl DkgService for MpcNodeService {
 
 #[tonic::async_trait]
 impl DsgService for MpcNodeService {
-    async fn init_dsg(
+    async fn execute_dsg_phase(
         &self,
-        request: Request<InitDsgRequest>
-    ) -> Result<Response<InitDsgResponse>, Status> {
+        request: Request<DsgPhaseRequest>
+    ) -> Result<Response<DsgPhaseResponse>, Status> {
         let req = request.into_inner();
-        debug!(
-            "InitDsg request: key_id={}, dsg_session_id={}, party_id={}, derivation_path={}, message_hash={}",
-            req.key_id,
-            req.dsg_session_id,
-            req.party_id,
-            req.derivation_path,
-            req.message_hash
-                .iter()
-                .map(|b| format!("{:02x}", b))
-                .collect::<String>()
-        );
-        let dkg_key = session_key(&req.key_id, req.party_id);
-        let dsg_key = session_key(&req.dsg_session_id, req.party_id);
-
-        let keyshare_bytes = self.storage
-            .get_keyshare(&dkg_key)
-            .map_err(|e| Status::internal(e.to_string()))?
-            .ok_or_else(|| {
-                Status::not_found(format!("Keyshare not found for key_id: {}", req.key_id))
-            })?;
-
-        let keyshare: Keyshare = bincode
-            ::deserialize(&keyshare_bytes)
-            .map_err(|e| Status::internal(format!("Failed to deserialize keyshare: {}", e)))?;
-
-        let engine = Dkls23Engine::new_dsg(
-            req.dsg_session_id.clone(),
-            keyshare,
-            &req.derivation_path,
-            req.message_hash
-        ).map_err(|e| Status::internal(e.to_string()))?;
-
-        self.dsg_sessions.insert(dsg_key, engine);
-        Ok(Response::new(InitDsgResponse { success: true }))
-    }
-
-    async fn advance_dsg(
-        &self,
-        request: Request<AdvanceDsgRequest>
-    ) -> Result<Response<AdvanceDsgResponse>, Status> {
-        let req = request.into_inner();
-        debug!(
-            "AdvanceDsg request: dsg_session_id={}, party_id={}, payloads=[{}]",
-            req.dsg_session_id,
-            req.party_id,
-            req.payloads
-                .iter()
-                .map(|p| format!("{} bytes", p.len()))
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
         let key = session_key(&req.dsg_session_id, req.party_id);
 
-        let result = {
-            let mut session = self.dsg_sessions
-                .get_mut(&key)
-                .ok_or_else(|| Status::not_found("DSG Session not found"))?;
-            session.advance_dsg(&req.payloads)
-        };
+        match req.payload.ok_or_else(|| Status::invalid_argument("Missing payload"))? {
+            dsg_phase_request::Payload::Init(init) => {
+                debug!(
+                    "ExecuteDsgPhase (Init): session_id={}, party_id={}, key_id={}, message_hash={}",
+                    req.dsg_session_id,
+                    req.party_id,
+                    init.key_id,
+                    init.message_hash
+                        .iter()
+                        .map(|b| format!("{:02x}", b))
+                        .collect::<String>()
+                );
+                let dkg_key = session_key(&init.key_id, req.party_id);
 
-        match result {
-            Ok((output, is_done)) => {
-                if is_done {
-                    self.dsg_sessions.remove(&key);
-                }
-                Ok(Response::new(AdvanceDsgResponse { output, is_done }))
+                let keyshare_bytes = self.storage
+                    .get_keyshare(&dkg_key)
+                    .map_err(|e| Status::internal(e.to_string()))?
+                    .ok_or_else(|| {
+                        Status::not_found(format!("Keyshare not found for key_id: {}", init.key_id))
+                    })?;
+
+                let keyshare: Keyshare = bincode
+                    ::deserialize(&keyshare_bytes)
+                    .map_err(|e|
+                        Status::internal(format!("Failed to deserialize keyshare: {}", e))
+                    )?;
+
+                let mut engine = Dkls23Engine::new_dsg(
+                    req.dsg_session_id.clone(),
+                    keyshare,
+                    &init.derivation_path,
+                    init.message_hash
+                ).map_err(|e| Status::internal(e.to_string()))?;
+
+                let phase1_output = match engine.advance_dsg(&[]) {
+                    Ok(DsgRoundOutput::Intermediate(output)) => output,
+                    Ok(DsgRoundOutput::Final { .. }) => {
+                        return Err(Status::internal("Unexpected final output from DSG Phase 1"));
+                    }
+                    Err(e) => {
+                        return Err(Status::internal(e.to_string()));
+                    }
+                };
+
+                self.dsg_sessions.insert(key, engine);
+                Ok(
+                    Response::new(DsgPhaseResponse {
+                        result: Some(dsg_phase_response::Result::IntermediateOutput(phase1_output)),
+                    })
+                )
             }
-            Err(e) => {
-                self.dsg_sessions.remove(&key);
-                Err(Status::internal(e.to_string()))
+            dsg_phase_request::Payload::PeerPayloads(peer) => {
+                debug!(
+                    "ExecuteDsgPhase (Advance): session_id={}, party_id={}, payloads=[{}]",
+                    req.dsg_session_id,
+                    req.party_id,
+                    peer.payloads
+                        .iter()
+                        .map(|p| format!("{} bytes", p.len()))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+
+                let result = {
+                    let mut session = self.dsg_sessions
+                        .get_mut(&key)
+                        .ok_or_else(|| Status::not_found("DSG Session not found"))?;
+                    session.advance_dsg(&peer.payloads)
+                };
+
+                match result {
+                    Ok(DsgRoundOutput::Intermediate(output)) => {
+                        Ok(
+                            Response::new(DsgPhaseResponse {
+                                result: Some(
+                                    dsg_phase_response::Result::IntermediateOutput(output)
+                                ),
+                            })
+                        )
+                    }
+                    Ok(DsgRoundOutput::Final { s_0, s_1, r }) => {
+                        self.dsg_sessions.remove(&key);
+                        Ok(
+                            Response::new(DsgPhaseResponse {
+                                result: Some(
+                                    dsg_phase_response::Result::SignatureShare(
+                                        mpc_proto::SignatureShare { s_0, s_1, r }
+                                    )
+                                ),
+                            })
+                        )
+                    }
+                    Err(e) => {
+                        self.dsg_sessions.remove(&key);
+                        Err(Status::internal(e.to_string()))
+                    }
+                }
             }
         }
     }

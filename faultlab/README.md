@@ -22,6 +22,8 @@ micromamba run -n faultlab_env python -m grpc_tools.protoc \
     -I./src \
     --python_out=./src/ \
     --grpc_python_out=./src/ \
+    --mypy_out=./src/ \
+    --mypy_grpc_out=./src/ \
     ./src/faultlab/proto/dkg.proto
 ```
 ### Proxy
@@ -30,5 +32,7 @@ micromamba run -n faultlab_env python -m grpc_tools.protoc \
     -I./proxy \
     --python_out=./proxy/ \
     --grpc_python_out=./proxy/ \
+    --mypy_out=./proxy/ \
+    --mypy_grpc_out=./proxy/ \
     ./proxy/proto/dsg.proto
 ```

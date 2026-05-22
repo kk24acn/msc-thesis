@@ -3,9 +3,9 @@ import httpx
 import asyncpg
 import asyncio
 import logging
-from datetime import datetime, timezone
-
+import time
 from decimal import Decimal
+from pathlib import Path
 
 from faultlab.client.blockchain.funder_client import FunderClient
 from faultlab.client.docker import DockerClient
@@ -15,7 +15,7 @@ from faultlab.db.mpc_keys import MpcKeysRepository
 from faultlab.db.transactions import TransactionsRepository
 from faultlab.client.signer import DkgClient
 from faultlab.client.proxy import ProxyControlPlaneClient
-from faultlab.analysis.metrics import compute_metrics, save_metrics_csv
+from faultlab.analysis import save_transactions_csv, TERMINAL_STATUSES
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +27,12 @@ async def setup_and_fund_mpc_accounts(
     mpc_keys_repository: MpcKeysRepository,
     dkg_client: DkgClient,
     funder_client: FunderClient,
+    num_accounts: int,
+    funding_amount_eth: str,
 ):
     try:
         await dkg_client.setup_keys(
-            num_sessions=settings.DKG_SESSIONS,
+            num_sessions=num_accounts,
             threshold=settings.DKG_THRESHOLD,
             total_parties=settings.DKG_TOTAL_PARTIES,
         )
@@ -38,7 +40,7 @@ async def setup_and_fund_mpc_accounts(
         await asyncio.to_thread(
             funder_client.fund_accounts_batch,
             keys_df["ethereum_address"].tolist(),
-            Decimal(settings.FUNDING_AMOUNT_ETH),
+            Decimal(funding_amount_eth),
         )
         return keys_df
     except Exception as e:
@@ -128,7 +130,7 @@ def mpc_keys_repository() -> MpcKeysRepository:
     if not settings.DATABASE_URL:
         pytest.skip("DATABASE_URL not configured")
 
-    return MpcKeysRepository(dsn=settings.DATABASE_URL)
+    return MpcKeysRepository(db_url=settings.DATABASE_URL)
 
 
 @pytest.fixture
@@ -136,7 +138,7 @@ def transactions_repository() -> TransactionsRepository:
     if not settings.DATABASE_URL:
         pytest.skip("DATABASE_URL not configured")
 
-    return TransactionsRepository(dsn=settings.DATABASE_URL)
+    return TransactionsRepository(db_url=settings.DATABASE_URL)
 
 
 @pytest.fixture(scope="session")
@@ -157,38 +159,54 @@ def mpc_accounts(mpc_keys_repository: MpcKeysRepository) -> list[tuple[str, str]
 
 
 @pytest.fixture(autouse=True)
-def collect_metrics(
-    request: pytest.FixtureRequest, transactions_repository: TransactionsRepository, docker_client: DockerClient
+def collect_db_state(
+    request: pytest.FixtureRequest,
+    transactions_repository: TransactionsRepository,
 ):
-    """Collect and save transaction metrics for tests marked with @pytest.mark.collect_metrics.
+    """Save the transactions table to CSV after test completion.
 
-    Stops non-essential dashboard containers during test execution for fair metrics collection,
-    then restarts them after completion.
+    Polls every 10s until all rows reach a terminal status
+    (CONFIRMED / STALLED / FAILED / CRYPTOGRAPHIC_ABORT), then writes a CSV to tests/results/.
+    Times out after 120s, logs a warning, and saves the partial snapshot
+    without failing the test.
     """
-    if request.node.get_closest_marker("collect_metrics") is None:
-        yield
-        return
-
-    async def setup_metrics():
-        await docker_client.stop_dashboard_containers()
-        transactions_repository.truncate()
-
-    async def teardown_metrics():
-        try:
-            metrics = compute_metrics(transactions_repository, start_time)
-            metrics.log()
-            save_metrics_csv(request.node.name, transactions_repository, start_time)
-        except Exception as e:
-            logger.error(f"Failed to collect metrics for {request.node.name}: {e}")
-        finally:
-            await docker_client.start_dashboard_containers()
-
-    asyncio.run(setup_metrics())
-    start_time = datetime.now(timezone.utc)
 
     yield
 
-    asyncio.run(teardown_metrics())
+    if request.node.get_closest_marker("collect_db_state") is None:
+        return
+
+    if not settings.DATABASE_URL:
+        logger.warning("DATABASE_URL not configured, skipping CSV export")
+        return
+
+    marker = request.node.get_closest_marker("collect_db_state")
+    results_subdir = marker.kwargs.get("results_subdir", "")
+    results_dir = Path(__file__).parent.joinpath("results")
+    if results_subdir:
+        results_dir = results_dir.joinpath(results_subdir)
+    results_dir.mkdir(parents=True, exist_ok=True)
+
+    POLL_INTERVAL_S = 10
+    TIMEOUT_S = 120
+    elapsed = 0
+    df = transactions_repository.fetch_all()
+
+    while elapsed < TIMEOUT_S:
+        pending = int((~df["status"].isin(TERMINAL_STATUSES)).sum()) if not df.empty else 0
+        if pending == 0:
+            break
+        logger.info(f"{pending} transactions still pending ({elapsed}s elapsed) — waiting {POLL_INTERVAL_S}s...")
+        time.sleep(POLL_INTERVAL_S)
+        elapsed += POLL_INTERVAL_S
+        df = transactions_repository.fetch_all()
+    else:
+        pending = int((~df["status"].isin(TERMINAL_STATUSES)).sum()) if not df.empty else 0
+        logger.warning(f"Timed out after {TIMEOUT_S}s with {pending} transactions still not in terminal status")
+
+    test_name = request.node.name.replace("[", "_").replace("]", "").replace("/", "_")
+    csv_path = save_transactions_csv(df, results_dir, test_name)
+    logger.info(f"Saved {len(df):,} row(s) -> {csv_path}")
 
 
 @pytest.fixture(autouse=True)
@@ -202,19 +220,26 @@ def blockchain_refresh(
 ) -> None:
     """Refresh blockchain state when test is marked with @pytest.mark.blockchain_refresh
 
-    This fixture performs:
+    Marker accepts optional keyword arguments:
+    - num_accounts: int - Number of MPC accounts to generate (default: 10)
+    - funding_amount_eth: str - Amount in ETH to fund each account (default: 10_000)
+
+    Performs:
     1. Restarts hardhat (resets chain state)
     2. Clears keyshare DBs on signer nodes
     3. Truncates transactions table
     4. Truncates mpc_accounts table
-
     5. Restarts orchestrator (resets nonce counters)
-    6. Computes and funds new MPC accounts set
+    6. Generates and funds new MPC accounts set
     """
     if request.node.get_closest_marker("blockchain_refresh") is None:
         return
 
-    logger.info("Blockchain refresh triggered for test")
+    marker = request.node.get_closest_marker("blockchain_refresh")
+    num_accounts = marker.kwargs.get("num_accounts", 10)
+    funding_amount_eth = marker.kwargs.get("funding_amount_eth", "10000")
+
+    logger.info(f"Blockchain refresh triggered for test (num_accounts={num_accounts}, funding={funding_amount_eth} ETH)") # fmt: skip
 
     async def refresh():
         await asyncio.gather(
@@ -226,55 +251,61 @@ def blockchain_refresh(
         await asyncio.gather(
             docker_client.restart_orchestrator(),
             docker_client.restart_proxies(),
-            setup_and_fund_mpc_accounts(mpc_keys_repository, dkg_client, funder_client),
+            setup_and_fund_mpc_accounts(
+                mpc_keys_repository,
+                dkg_client,
+                funder_client,
+                num_accounts=num_accounts,
+                funding_amount_eth=funding_amount_eth,
+            ),
         )
 
     asyncio.run(refresh())
 
 
 @pytest.fixture(autouse=True)
-async def fault_injection(request: pytest.FixtureRequest, proxy_client: ProxyControlPlaneClient):
+async def inject_fault(request: pytest.FixtureRequest, proxy_client: ProxyControlPlaneClient):
     """Automatically inject faults before test if marked with @pytest.mark.inject_fault.
 
     Marker accepts keyword arguments:
-    - fault_type: str - Type of fault to inject
-    - target_method: str - Target method for fault
+    - fault_type: Literal["DROP_REQ", "DROP_RES", "DELAY", "MUTATE", "REPLAY"] - Type of fault to inject
     - failure_rate: int - Failure rate percentage (1-100)
-    - metadata: dict - Fault-specific metadata
+    - metadata: dict - Fault-specific metadata (see per-fault-type keys below)
+    - rounds: list[int] | None - 1-indexed rounds to target (1=Init, 2-4=Advance); None = all rounds
+    - signers: list[int] | int | None - 1-indexed signers to disrupt; int = N randomly selected signers; None = all signers
+    - inject_until_retry: int | None - stop injecting after this retry count (0=first attempt only, 1=first attempt + first retry, …); None = fault every attempt
+
+    Metadata keys by fault type:
+    - DROP_REQ / DROP_RES: no metadata keys (metadata is ignored)
+    - DELAY:  delay_ms (int, default 0)      — milliseconds to sleep before forwarding
+    - MUTATE: byte_offset (int, default 10)  — offset from the END of the payload bytes; targets fixed-size crypto fields
+              xor_mask   (int, default 0xFF) — XOR mask applied to that byte
+    - REPLAY: (no metadata keys) — on round 4, returns the cached response from the first session instead of forwarding to the signer
     """
 
     marker: pytest.Mark = request.node.get_closest_marker("inject_fault")
     if marker is None:
-        yield
         return
 
     fault_type = marker.kwargs.get("fault_type", None)
-    target_method = marker.kwargs.get("target_method", None)
     failure_rate = marker.kwargs.get("failure_rate", 0)
     metadata = marker.kwargs.get("metadata", {})
+    rounds = marker.kwargs.get("rounds", None)
+    signers = marker.kwargs.get("signers", None)
+    inject_until_retry = marker.kwargs.get("inject_until_retry", None)
 
     try:
-        if fault_type and target_method and failure_rate:
+        if fault_type and failure_rate:
             await proxy_client.inject_all(
                 fault_type=fault_type,
-                target_method=target_method,
                 failure_rate=failure_rate,
                 metadata=metadata,
-            )
-            logger.info(
-                f"Injected {fault_type} on proxies (method={target_method},"
-                f"rate={failure_rate}%) for test {request.node.name}"
+                rounds=rounds,
+                signers=signers,
+                inject_until_retry=inject_until_retry,
             )
         else:
-            logger.info(f"Fault injection skipped (type={fault_type}, method={target_method}, rate={failure_rate}%)")
+            logger.info(f"Fault injection skipped (type={fault_type}, rate={failure_rate}%)")
     except Exception as e:
         logger.error(f"Failed to inject fault for {request.node.name}: {e}")
         raise
-
-    yield
-
-    try:
-        await proxy_client.reset_all()
-        logger.info(f"Reset faults on proxies after test {request.node.name}")
-    except Exception as e:
-        logger.error(f"Failed to reset faults after {request.node.name}: {e}")

@@ -4,29 +4,38 @@ package mpc.signer;
 option java_package = "uk.ac.herts.orchestrator.grpc.signer";
 
 service DsgService {
-    rpc InitDsg(InitDsgRequest) returns (InitDsgResponse);
-    rpc AdvanceDsg(AdvanceDsgRequest) returns (AdvanceDsgResponse);
+    rpc ExecuteDsgPhase(DsgPhaseRequest) returns (DsgPhaseResponse);
 }
 
-message InitDsgRequest {
-    string key_id = 1;
-    string dsg_session_id = 2;
-    uint32 party_id = 3;
-    bytes message_hash = 4;
-    string derivation_path = 5;
-}
-
-message InitDsgResponse {
-    bool success = 1;
-}
-
-message AdvanceDsgRequest {
+message DsgPhaseRequest {
     string dsg_session_id = 1;
     uint32 party_id = 2;
-    repeated bytes payloads = 3;
+
+    oneof payload {
+        InitPayload init = 3;
+        PeerPayloads peer_payloads = 4;
+    }
 }
 
-message AdvanceDsgResponse {
-    bytes output = 1;
-    bool is_done = 2;
+message InitPayload {
+    string key_id = 1;
+    bytes message_hash = 2;
+    string derivation_path = 3;
+}
+
+message PeerPayloads {
+    repeated bytes payloads = 1;
+}
+
+message SignatureShare {
+    bytes s_0 = 1;
+    bytes s_1 = 2;
+    bytes r = 3;
+}
+
+message DsgPhaseResponse {
+    oneof result {
+        bytes intermediate_output = 1;
+        SignatureShare signature_share = 2;
+    }
 }

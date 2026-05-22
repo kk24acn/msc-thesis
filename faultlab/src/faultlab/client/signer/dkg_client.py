@@ -36,7 +36,7 @@ class DkgClient:
             outputs = []
             for party_id in range(total_parties):
                 try:
-                    req = dkg_pb2.AdvanceDkgRequest(session_id=session_id, party_id=party_id, payloads=input_payloads)  # type: ignore
+                    req = dkg_pb2.AdvanceDkgRequest(session_id=session_id, party_id=party_id, payloads=input_payloads)
                     res = self.signer_stubs[party_id].AdvanceDkg(req)
                     logger.debug(f"DKG {session_id}: Round {round_num}, party {party_id}, is_done={res.is_done}") # fmt: skip
                     outputs.append(res.output)
@@ -54,7 +54,7 @@ class DkgClient:
 
             for party_id in range(total_parties):
                 try:
-                    req = dkg_pb2.AdvanceDkgRequest(session_id=session_id, party_id=party_id, payloads=final_outputs)  # type: ignore
+                    req = dkg_pb2.AdvanceDkgRequest(session_id=session_id, party_id=party_id, payloads=final_outputs)
                     res = self.signer_stubs[party_id].AdvanceDkg(req)
                     is_done_states.append(res.is_done)
 
@@ -76,7 +76,7 @@ class DkgClient:
         logger.debug(f"Starting DKG session {session_id} with threshold={threshold}, parties={total_parties}")
 
         for party_id in range(total_parties):
-            init_req = dkg_pb2.InitDkgRequest(  # type: ignore
+            init_req = dkg_pb2.InitDkgRequest(
                 session_id=session_id,
                 party_id=party_id,
                 threshold=threshold,

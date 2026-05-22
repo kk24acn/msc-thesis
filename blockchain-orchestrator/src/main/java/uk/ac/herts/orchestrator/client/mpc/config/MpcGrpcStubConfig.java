@@ -1,4 +1,4 @@
-package uk.ac.herts.orchestrator.config;
+package uk.ac.herts.orchestrator.client.mpc.config;
 
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -6,9 +6,11 @@ import java.util.stream.Collectors;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import io.grpc.Channel;
 import io.grpc.netty.shaded.io.grpc.netty.NettyChannelBuilder;
 import lombok.extern.slf4j.Slf4j;
 import uk.ac.herts.orchestrator.grpc.signer.DsgServiceGrpc;
+import uk.ac.herts.orchestrator.grpc.signer.DsgServiceGrpc.DsgServiceFutureStub;
 
 @Slf4j
 @Configuration
@@ -23,11 +25,11 @@ public class MpcGrpcStubConfig {
                             log.info("Creating gRPC stub for Signer#{} at address: {}",
                                     node.getId(), node.getAddress());
                             try {
-                                var channel = NettyChannelBuilder
+                                Channel channel = NettyChannelBuilder
                                         .forTarget(node.getAddress())
                                         .usePlaintext()
                                         .build();
-                                var stub = DsgServiceGrpc.newFutureStub(channel);
+                                DsgServiceFutureStub stub = DsgServiceGrpc.newFutureStub(channel);
                                 log.info("DSG Service stub created for Signer#{} ({})",
                                         node.getId(), node.getAddress());
                                 return stub;

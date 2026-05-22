@@ -5,8 +5,7 @@ from threading import Thread
 from flask import Flask, jsonify, request
 from flask.wrappers import Response
 
-from fault_state import FaultConfig, FaultState, FaultType
-
+from fault_state import DSG_TOTAL_ROUNDS, FaultConfig, FaultState, FaultType
 
 logger = logging.getLogger(__name__)
 
@@ -22,13 +21,28 @@ def _parse_fault_config(payload: dict) -> FaultConfig:
     except ValueError:
         raise ValueError(f"unknown fault_type '{raw_fault_type}', must be one of {[e.value for e in FaultType]}")
 
+    rounds = payload.get("rounds")
+    if rounds is not None:
+        if isinstance(rounds, list):
+            if not all(isinstance(r, int) and r >= 1 and r <= DSG_TOTAL_ROUNDS for r in rounds):
+                raise ValueError(f"rounds (list) must contain positive integers from 1 to {DSG_TOTAL_ROUNDS}")
+        else:
+            raise ValueError(f"rounds must be a list[int] between 1 and {DSG_TOTAL_ROUNDS}")
+    else:
+        rounds = list(range(1, DSG_TOTAL_ROUNDS + 1))
+
+    inject_until_retry = payload.get("inject_until_retry")
+    if inject_until_retry is not None:
+        if not isinstance(inject_until_retry, int) or inject_until_retry < 0:
+            raise ValueError("inject_until_retry must be a non-negative integer")
+
     return FaultConfig(
         enabled=payload.get("enabled", False),
         fault_type=fault_type,
-        target_service=payload.get("target_service", ""),
-        target_method=payload.get("target_method", ""),
         failure_rate=failure_rate,
         metadata=payload.get("metadata", {}),
+        rounds=rounds,
+        inject_until_retry=inject_until_retry,
     )
 
 
@@ -48,8 +62,10 @@ class ControlPlane:
                 fault_config = _parse_fault_config(payload)
                 self.fault_state.update(fault_config)
                 logger.info(
-                    f"Fault configuration updated: {fault_config.fault_type} "
-                    f"for {fault_config.target_service}/{fault_config.target_method}"
+                    f"Fault configuration updated: {fault_config.fault_type} ("
+                    f"enabled={fault_config.enabled}, rate={fault_config.failure_rate}%, "
+                    f"metadata={fault_config.metadata}, rounds={fault_config.rounds}, "
+                    f"until_retry={fault_config.inject_until_retry})"
                 )
                 return jsonify({"status": "ok", "fault": fault_config.__dict__})
             except Exception as e:

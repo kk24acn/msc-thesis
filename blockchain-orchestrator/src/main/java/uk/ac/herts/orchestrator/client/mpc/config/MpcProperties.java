@@ -1,4 +1,4 @@
-package uk.ac.herts.orchestrator.config;
+package uk.ac.herts.orchestrator.client.mpc.config;
 
 import java.time.Duration;
 import java.util.ArrayList;

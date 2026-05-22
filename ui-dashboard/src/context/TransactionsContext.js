@@ -23,12 +23,14 @@ const transformDbRecord = (dbTx) => {
     const isConfirmed = statusUpper === 'CONFIRMED' || statusUpper === 'SUCCESS';
     const isFailed = statusUpper === 'FAILED' || statusUpper === 'ERROR';
     const isCryptoAbort = statusUpper === 'CRYPTOGRAPHIC_ABORT';
+    const isVerificationAbort = statusUpper === 'VERIFICATION_ABORT';
     const isInMempool = statusUpper === 'IN_MEMPOOL';
     const isStalled = statusUpper === 'STALLED';
 
     let uiStatus = 'running';
     if (isConfirmed) uiStatus = 'completed';
     else if (isCryptoAbort) uiStatus = 'crypto_abort';
+    else if (isVerificationAbort) uiStatus = 'verification_abort';
     else if (isFailed) uiStatus = 'failed';
     else if (isStalled) uiStatus = 'stalled';
     else if (isInMempool) uiStatus = 'in_mempool';
@@ -51,7 +53,7 @@ const transformDbRecord = (dbTx) => {
     if (statusUpper === 'SIGNED') progress = 40;
     if (statusUpper === 'SUBMITTING') progress = 60;
     if (isInMempool || isStalled) progress = 75;
-    if (isCryptoAbort || isFailed || isConfirmed) progress = 100;
+    if (isCryptoAbort || isVerificationAbort || isFailed || isConfirmed) progress = 100;
 
     const shortAddress = dbTx.to_address
         ? `${dbTx.to_address.substring(0, 6)}...${dbTx.to_address.substring(38)}`
@@ -129,30 +131,31 @@ const transformDbRecord = (dbTx) => {
                 name: 'Queued',
                 status: signingStartedAt
                     ? 'completed'
-                    : (isFailed || isCryptoAbort) ? 'failed' : 'running',
+                    : (isFailed || isCryptoAbort || isVerificationAbort) ? 'failed' : 'running',
                 timing: waitTiming,
             },
             {
                 name: 'Signed',
                 status: dbTx.signed_hex_payload
                     ? 'completed'
-                    : (isCryptoAbort || isFailed) ? 'failed'
+                    : (isCryptoAbort || isVerificationAbort || isFailed) ? 'failed'
                         : signingStartedAt ? 'running' : 'pending',
                 timing: signedTiming,
             },
             {
                 name: 'In Mempool',
-                status: isConfirmed ? 'completed' : (isFailed || isCryptoAbort) ? 'failed' : isStalled ? 'stalled' : (isInMempool || dbTx.transaction_hash) ? 'in_mempool' : 'pending',
+                status: isConfirmed ? 'completed' : (isFailed || isCryptoAbort || isVerificationAbort) ? 'failed' : isStalled ? 'stalled' : (isInMempool || dbTx.transaction_hash) ? 'in_mempool' : 'pending',
                 timing: submittedTiming,
             },
             {
                 name: 'Confirmed',
-                status: isConfirmed ? 'completed' : ((isFailed || isCryptoAbort) ? 'failed' : 'pending'),
+                status: isConfirmed ? 'completed' : ((isFailed || isCryptoAbort || isVerificationAbort) ? 'failed' : 'pending'),
                 timing: confirmedTiming,
             },
         ],
         duration: durationStr,
         startTime: startTime,
+        updatedAt: updatedAt,
         progress: progress,
         logs,
     };

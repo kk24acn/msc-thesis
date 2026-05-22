@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0fproto/dsg.proto\x12\nmpc.signer\"y\n\x0eInitDsgRequest\x12\x0e\n\x06key_id\x18\x01 \x01(\t\x12\x16\n\x0e\x64sg_session_id\x18\x02 \x01(\t\x12\x10\n\x08party_id\x18\x03 \x01(\r\x12\x14\n\x0cmessage_hash\x18\x04 \x01(\x0c\x12\x17\n\x0f\x64\x65rivation_path\x18\x05 \x01(\t\"\"\n\x0fInitDsgResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\"O\n\x11\x41\x64vanceDsgRequest\x12\x16\n\x0e\x64sg_session_id\x18\x01 \x01(\t\x12\x10\n\x08party_id\x18\x02 \x01(\r\x12\x10\n\x08payloads\x18\x03 \x03(\x0c\"5\n\x12\x41\x64vanceDsgResponse\x12\x0e\n\x06output\x18\x01 \x01(\x0c\x12\x0f\n\x07is_done\x18\x02 \x01(\x08\x32\x9d\x01\n\nDsgService\x12\x42\n\x07InitDsg\x12\x1a.mpc.signer.InitDsgRequest\x1a\x1b.mpc.signer.InitDsgResponse\x12K\n\nAdvanceDsg\x12\x1d.mpc.signer.AdvanceDsgRequest\x1a\x1e.mpc.signer.AdvanceDsgResponseB&\n$uk.ac.herts.orchestrator.grpc.signerb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0fproto/dsg.proto\x12\nmpc.signer\"\xa2\x01\n\x0f\x44sgPhaseRequest\x12\x16\n\x0e\x64sg_session_id\x18\x01 \x01(\t\x12\x10\n\x08party_id\x18\x02 \x01(\r\x12\'\n\x04init\x18\x03 \x01(\x0b\x32\x17.mpc.signer.InitPayloadH\x00\x12\x31\n\rpeer_payloads\x18\x04 \x01(\x0b\x32\x18.mpc.signer.PeerPayloadsH\x00\x42\t\n\x07payload\"L\n\x0bInitPayload\x12\x0e\n\x06key_id\x18\x01 \x01(\t\x12\x14\n\x0cmessage_hash\x18\x02 \x01(\x0c\x12\x17\n\x0f\x64\x65rivation_path\x18\x03 \x01(\t\" \n\x0cPeerPayloads\x12\x10\n\x08payloads\x18\x01 \x03(\x0c\"5\n\x0eSignatureShare\x12\x0b\n\x03s_0\x18\x01 \x01(\x0c\x12\x0b\n\x03s_1\x18\x02 \x01(\x0c\x12\t\n\x01r\x18\x03 \x01(\x0c\"r\n\x10\x44sgPhaseResponse\x12\x1d\n\x13intermediate_output\x18\x01 \x01(\x0cH\x00\x12\x35\n\x0fsignature_share\x18\x02 \x01(\x0b\x32\x1a.mpc.signer.SignatureShareH\x00\x42\x08\n\x06result2Z\n\nDsgService\x12L\n\x0f\x45xecuteDsgPhase\x12\x1b.mpc.signer.DsgPhaseRequest\x1a\x1c.mpc.signer.DsgPhaseResponseB&\n$uk.ac.herts.orchestrator.grpc.signerb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -32,14 +32,16 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'proto.dsg_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'\n$uk.ac.herts.orchestrator.grpc.signer'
-  _globals['_INITDSGREQUEST']._serialized_start=31
-  _globals['_INITDSGREQUEST']._serialized_end=152
-  _globals['_INITDSGRESPONSE']._serialized_start=154
-  _globals['_INITDSGRESPONSE']._serialized_end=188
-  _globals['_ADVANCEDSGREQUEST']._serialized_start=190
-  _globals['_ADVANCEDSGREQUEST']._serialized_end=269
-  _globals['_ADVANCEDSGRESPONSE']._serialized_start=271
-  _globals['_ADVANCEDSGRESPONSE']._serialized_end=324
-  _globals['_DSGSERVICE']._serialized_start=327
-  _globals['_DSGSERVICE']._serialized_end=484
+  _globals['_DSGPHASEREQUEST']._serialized_start=32
+  _globals['_DSGPHASEREQUEST']._serialized_end=194
+  _globals['_INITPAYLOAD']._serialized_start=196
+  _globals['_INITPAYLOAD']._serialized_end=272
+  _globals['_PEERPAYLOADS']._serialized_start=274
+  _globals['_PEERPAYLOADS']._serialized_end=306
+  _globals['_SIGNATURESHARE']._serialized_start=308
+  _globals['_SIGNATURESHARE']._serialized_end=361
+  _globals['_DSGPHASERESPONSE']._serialized_start=363
+  _globals['_DSGPHASERESPONSE']._serialized_end=477
+  _globals['_DSGSERVICE']._serialized_start=479
+  _globals['_DSGSERVICE']._serialized_end=569
 # @@protoc_insertion_point(module_scope)

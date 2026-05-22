@@ -1,6 +1,6 @@
 use derivation_path::DerivationPath;
 use dkls23_ll::{ dkg, dsg };
-use k256::ecdsa;
+use k256::elliptic_curve::sec1::ToEncodedPoint;
 use log::{ debug, error, info };
 use rand::rngs::OsRng;
 use std::str::FromStr;
@@ -30,9 +30,17 @@ pub enum DsgStateWrapper {
     Phase2(dsg::State),
     Phase3(dsg::State),
     Phase4(dsg::State),
-    Phase5(dsg::PartialSignature, ecdsa::VerifyingKey),
     Completed,
     Failed,
+}
+
+pub enum DsgRoundOutput {
+    Intermediate(Vec<u8>),
+    Final {
+        s_0: Vec<u8>,
+        s_1: Vec<u8>,
+        r: Vec<u8>,
+    },
 }
 
 pub enum MpcSessionState {
@@ -211,7 +219,7 @@ impl Dkls23Engine {
         }
     }
 
-    pub fn advance_dsg(&mut self, payloads: &[Vec<u8>]) -> Result<(Vec<u8>, bool), EngineError> {
+    pub fn advance_dsg(&mut self, payloads: &[Vec<u8>]) -> Result<DsgRoundOutput, EngineError> {
         let current_state = std::mem::replace(
             &mut self.state,
             MpcSessionState::Dsg(DsgStateWrapper::Failed)
@@ -220,15 +228,16 @@ impl Dkls23Engine {
         match current_state {
             MpcSessionState::Dsg(DsgStateWrapper::Phase1(mut state)) => {
                 // Generate random secret (nonce) and prepare commitment (hashed public nonce mixed with blinding factor)
-                debug!("DSG Session {}: Advancing Phase 1 -> Phase 2", self.session_id);
+                debug!("DSG Session {}: Advancing Phase 1 | Init", self.session_id);
+
                 let msg1 = state.generate_msg1();
                 let output = bincode::serialize(&msg1)?;
                 self.state = MpcSessionState::Dsg(DsgStateWrapper::Phase2(state));
-                Ok((output, false))
+                Ok(DsgRoundOutput::Intermediate(output))
             }
             MpcSessionState::Dsg(DsgStateWrapper::Phase2(mut state)) => {
                 // Prepare MtA setup params for each peer using Phase 1 commitments
-                debug!("DSG Session {}: Advancing Phase 2 -> Phase 3", self.session_id);
+                debug!("DSG Session {}: Advancing Phase 2 | Prep MtA", self.session_id);
 
                 let filtered_msgs: Vec<dsg::SignMsg1> = payloads
                     .iter()
@@ -245,11 +254,11 @@ impl Dkls23Engine {
 
                 let output = bincode::serialize(&msg2)?;
                 self.state = MpcSessionState::Dsg(DsgStateWrapper::Phase3(state));
-                Ok((output, false))
+                Ok(DsgRoundOutput::Intermediate(output))
             }
             MpcSessionState::Dsg(DsgStateWrapper::Phase3(mut state)) => {
                 // Complete the MtA conversion using setup params for this node, reveal public nonce and blinding factor
-                debug!("DSG Session {}: Advancing Phase 3 -> Phase 4", self.session_id);
+                debug!("DSG Session {}: Advancing Phase 3 | Complete MtA", self.session_id);
 
                 let filtered_msgs: Vec<dsg::SignMsg2> = payloads
                     .iter()
@@ -267,11 +276,11 @@ impl Dkls23Engine {
 
                 let output = bincode::serialize(&msg3)?;
                 self.state = MpcSessionState::Dsg(DsgStateWrapper::Phase4(state));
-                Ok((output, false))
+                Ok(DsgRoundOutput::Intermediate(output))
             }
             MpcSessionState::Dsg(DsgStateWrapper::Phase4(mut state)) => {
                 // Verify nonces with Phase 1 commitments, prepare partial signature
-                debug!("DSG Session {}: Advancing Phase 4 -> Phase 5", self.session_id);
+                debug!("DSG Session {}: Advancing Phase 4 | Finalize", self.session_id);
 
                 let filtered_msgs: Vec<dsg::SignMsg3> = payloads
                     .iter()
@@ -294,59 +303,16 @@ impl Dkls23Engine {
                     .try_into()
                     .map_err(|_| EngineError::InvalidHash)?;
 
-                let (partial_sig, msg4) = dsg::create_partial_signature(presig, message_hash_arr);
-                let verifying_key = ecdsa::VerifyingKey
-                    ::from_affine(state.derived_public_key)
-                    .map_err(|e| EngineError::CryptoFault(e.to_string()))?;
+                let (partial_sig, _) = dsg::create_partial_signature(presig, message_hash_arr);
 
-                let output = bincode::serialize(&msg4)?;
-                self.state = MpcSessionState::Dsg(
-                    DsgStateWrapper::Phase5(partial_sig, verifying_key)
-                );
-                Ok((output, false))
-            }
-            MpcSessionState::Dsg(DsgStateWrapper::Phase5(local_partial, verifying_key)) => {
-                // Combine shares from other nodes with the local share saved in Phase 4, prepare recovery id
-                debug!("DSG Session {}: Advancing Phase 5 -> Completed", self.session_id);
+                let s_0 = partial_sig.s_0.to_bytes().to_vec();
+                let s_1 = partial_sig.s_1.to_bytes().to_vec();
+                let r = partial_sig.r.to_encoded_point(false).as_bytes().to_vec();
 
-                let mut seen = std::collections::HashSet::new();
-                let filtered_msgs: Vec<dsg::SignMsg4> = payloads
-                    .iter()
-                    .filter(|p| !p.is_empty())
-                    .map(|p| bincode::deserialize::<dsg::SignMsg4>(p))
-                    .collect::<Result<Vec<_>, _>>()?
-                    .into_iter()
-                    .filter(|m| m.from_id != self.party_id && seen.insert(m.from_id))
-                    .collect();
-
-                info!(
-                    "DSG Session {}: Combining {} remote shares with 1 local share",
-                    self.session_id,
-                    filtered_msgs.len()
-                );
-
-                let final_sig = dsg::combine_signatures(local_partial, filtered_msgs).map_err(|e| {
-                    error!("DSG Session {}: Combination failed: {}", self.session_id, e);
-                    EngineError::CryptoFault(e.to_string())
-                })?;
-
-                let recovery_id = ecdsa::RecoveryId
-                    ::trial_recovery_from_prehash(
-                        &verifying_key,
-                        self.message_hash.as_ref().ok_or(EngineError::InvalidHash)?.as_slice(),
-                        &final_sig
-                    )
-                    .map_err(|e| {
-                        error!("DSG Session {}: Message recovery failed.", self.session_id);
-                        EngineError::CryptoFault(e.to_string())
-                    })?;
-
-                let mut output = Vec::with_capacity(65);
-                output.extend_from_slice(final_sig.to_bytes().as_ref());
-                output.push(recovery_id.to_byte() + 27);
-
+                info!("DSG Session {}: Successfully completed", self.session_id);
                 self.state = MpcSessionState::Dsg(DsgStateWrapper::Completed);
-                Ok((output, true))
+
+                Ok(DsgRoundOutput::Final { s_0, s_1, r })
             }
             _ => {
                 error!("DSG Session {}: Invalid state transition", self.session_id);

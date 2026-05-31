@@ -6,8 +6,8 @@ RESULTS_SUBDIR = "BASELINE"
 NUM_TRANSACTIONS = 1000
 
 
-@pytest.mark.collect_db_state(results_subdir=RESULTS_SUBDIR, disable_ui=True)
 @pytest.mark.blockchain_refresh(num_accounts=2, funding_amount_eth="100.0")
+@pytest.mark.collect_db_state(results_subdir=RESULTS_SUBDIR, disable_ui=True)
 async def test_baseline_1_tx(orchestrator_client: OrchestratorClient, mpc_accounts: list[tuple[str, str]]):
     successful = await orchestrator_client.submit_transactions_batch(
         accounts=mpc_accounts,
@@ -17,8 +17,8 @@ async def test_baseline_1_tx(orchestrator_client: OrchestratorClient, mpc_accoun
     assert successful == 1
 
 
-@pytest.mark.collect_db_state(results_subdir=RESULTS_SUBDIR, disable_ui=True)
 @pytest.mark.blockchain_refresh(num_accounts=10, funding_amount_eth="10000.0")
+@pytest.mark.collect_db_state(results_subdir=RESULTS_SUBDIR, disable_ui=True)
 async def test_baseline_1000_txs_10_accounts(
     orchestrator_client: OrchestratorClient, mpc_accounts: list[tuple[str, str]]
 ):
@@ -30,8 +30,8 @@ async def test_baseline_1000_txs_10_accounts(
     assert successful >= NUM_TRANSACTIONS * 1.0, f"Too many submissions failed: {successful}/{NUM_TRANSACTIONS}"
 
 
-@pytest.mark.collect_db_state(results_subdir=RESULTS_SUBDIR, disable_ui=True)
 @pytest.mark.blockchain_refresh(num_accounts=100, funding_amount_eth="1000.0")
+@pytest.mark.collect_db_state(results_subdir=RESULTS_SUBDIR, disable_ui=True)
 async def test_baseline_1000_txs_100_accounts(
     orchestrator_client: OrchestratorClient, mpc_accounts: list[tuple[str, str]]
 ):
@@ -43,8 +43,8 @@ async def test_baseline_1000_txs_100_accounts(
     assert successful >= NUM_TRANSACTIONS * 1.0, f"Too many submissions failed: {successful}/{NUM_TRANSACTIONS}"
 
 
-@pytest.mark.collect_db_state(results_subdir=RESULTS_SUBDIR, disable_ui=True)
 @pytest.mark.blockchain_refresh(num_accounts=10, funding_amount_eth="10000.0")
+@pytest.mark.collect_db_state(results_subdir=RESULTS_SUBDIR, disable_ui=True)
 async def test_baseline_10000_txs_10_accounts(
     orchestrator_client: OrchestratorClient, mpc_accounts: list[tuple[str, str]]
 ):
@@ -56,8 +56,8 @@ async def test_baseline_10000_txs_10_accounts(
     assert successful >= NUM_TRANSACTIONS * 10 * 1.0, f"Too many submissions failed: {successful}/{NUM_TRANSACTIONS}"
 
 
-@pytest.mark.collect_db_state(results_subdir=RESULTS_SUBDIR, disable_ui=True)
 @pytest.mark.blockchain_refresh(num_accounts=100, funding_amount_eth="1000.0")
+@pytest.mark.collect_db_state(results_subdir=RESULTS_SUBDIR, disable_ui=True)
 async def test_baseline_10000_txs_100_accounts(
     orchestrator_client: OrchestratorClient, mpc_accounts: list[tuple[str, str]]
 ):

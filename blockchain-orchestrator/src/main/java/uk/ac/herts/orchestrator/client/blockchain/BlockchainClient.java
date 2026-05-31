@@ -16,6 +16,8 @@ public interface BlockchainClient {
 
     long fetchPendingTransactionCount(String address);
 
+    long fetchMinedTransactionCount(String address);
+
     SubmissionResult submitRawTransaction(String signedHexPayload, String fromAddress);
 
     List<String> fetchBlockTransactionHashes(BigInteger blockNumber);

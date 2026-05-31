@@ -21,7 +21,9 @@ const Transactions = () => {
         const query = search.toLowerCase();
         let base = activeFilter === 'all'
             ? transactions
-            : transactions.filter((t) => t.status === activeFilter);
+            : activeFilter === 'sweeped'
+                ? transactions.filter((t) => t.isSweeped)
+                : transactions.filter((t) => t.status === activeFilter);
 
         if (!query) {
             return base.sort((a, b) => {

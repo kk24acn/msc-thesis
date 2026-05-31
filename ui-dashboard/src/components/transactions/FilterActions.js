@@ -1,6 +1,6 @@
 import { Search } from 'lucide-react';
 
-const filters = ['all', 'running', 'in_mempool', 'stalled', 'completed', 'failed', 'crypto_abort', 'verification_abort'];
+const filters = ['all', 'running', 'in_mempool', 'stalled', 'completed', 'failed', 'crypto_abort', 'verification_abort', 'sweeped'];
 
 const filterLabels = {
     all: 'All',
@@ -11,6 +11,7 @@ const filterLabels = {
     failed: 'Failed',
     crypto_abort: 'Crypto Abort',
     verification_abort: 'Verification Abort',
+    sweeped: 'Sweeped',
 };
 
 const TransactionsFilters = ({ activeFilter, onFilterChange, search, onSearchChange, transactionCount = 0 }) => {

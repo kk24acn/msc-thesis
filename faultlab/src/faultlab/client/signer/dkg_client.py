@@ -38,7 +38,7 @@ class DkgClient:
                 try:
                     req = dkg_pb2.AdvanceDkgRequest(session_id=session_id, party_id=party_id, payloads=input_payloads)
                     res = self.signer_stubs[party_id].AdvanceDkg(req)
-                    logger.debug(f"DKG {session_id}: Round {round_num}, party {party_id}, is_done={res.is_done}") # fmt: skip
+                    logger.debug(f"DKG {session_id}: Round {round_num}, party {party_id}, is_done={res.is_done}")
                     outputs.append(res.output)
                 except Exception as e:
                     raise DkgClientError(f"DKG {session_id}: Round {round_num}, party {party_id} failed: {e}") from e
@@ -106,7 +106,7 @@ class DkgClient:
             raise DkgClientError(f"DKG session {session_id} failed: {e}") from e
 
     async def setup_keys(self, num_sessions: int, threshold: int, total_parties: int) -> int:
-        logger.info(f"Initiating {num_sessions} DKG sessions with threshold={threshold}, total_parties={total_parties}") # fmt: skip
+        logger.info(f"Initiating {num_sessions} DKG sessions with threshold={threshold}, total_parties={total_parties}")
 
         tasks = [
             asyncio.to_thread(self.setup_key, f"dkg-session-{i}", threshold, total_parties) for i in range(num_sessions)

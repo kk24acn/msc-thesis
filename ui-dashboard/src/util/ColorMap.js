@@ -9,6 +9,7 @@ export const stageBadgeClasses = {
     running: 'bg-darcula-cyan text-darcula-contrast',
     in_mempool: 'bg-darcula-purple text-darcula-contrast',
     stalled: 'bg-darcula-warning text-darcula-contrast',
+    sweeped: 'bg-darcula-warning text-darcula-contrast',
     failed: 'bg-darcula-accent text-darcula-contrast',
     crypto_abort: 'bg-darcula-accent text-darcula-contrast',
     verification_abort: 'bg-darcula-warning text-darcula-contrast',
@@ -16,5 +17,5 @@ export const stageBadgeClasses = {
 };
 
 export const getSafeStatus = (status) => {
-    return ['completed', 'running', 'failed', 'crypto_abort', 'verification_abort', 'in_mempool', 'stalled'].includes(status) ? status : 'pending';
+    return ['completed', 'running', 'failed', 'crypto_abort', 'verification_abort', 'in_mempool', 'stalled', 'sweeped'].includes(status) ? status : 'pending';
 };

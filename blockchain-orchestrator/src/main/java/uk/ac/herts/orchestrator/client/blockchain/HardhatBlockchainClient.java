@@ -26,23 +26,56 @@ public class HardhatBlockchainClient implements BlockchainClient {
     private final Web3j web3j;
     private final HardhatProperties hardhatProperties;
 
+    private volatile BigInteger cachedGasPrice;
+    private volatile long lastGasPriceFetchTime;
+
+    private volatile Long cachedBlockNumber;
+    private volatile long lastBlockNumberFetchTime;
+
     @Override
     public BigInteger fetchGasPrice() {
-        try {
-            BigInteger gasPrice = web3j.ethGasPrice().send().getGasPrice();
-            log.debug("Gas price fetched: {} wei", gasPrice);
-            return gasPrice;
-        } catch (IOException e) {
-            throw new RuntimeException("Gas price fetch failed", e);
+        long now = System.currentTimeMillis();
+        long cacheTtlMs = hardhatProperties.getGasPriceCacheTtl().toMillis();
+
+        if (cachedGasPrice != null && now - lastGasPriceFetchTime < cacheTtlMs) {
+            return cachedGasPrice;
+        }
+        synchronized (this) {
+            if (cachedGasPrice != null && now - lastGasPriceFetchTime < cacheTtlMs) {
+                return cachedGasPrice;
+            }
+            try {
+                BigInteger gasPrice = web3j.ethGasPrice().send().getGasPrice();
+                log.debug("Gas price fetched: {} wei", gasPrice);
+                cachedGasPrice = gasPrice;
+                lastGasPriceFetchTime = System.currentTimeMillis();
+                return gasPrice;
+            } catch (IOException e) {
+                throw new RuntimeException("Gas price fetch failed", e);
+            }
         }
     }
 
     @Override
     public long fetchCurrentBlockNumber() {
-        try {
-            return web3j.ethBlockNumber().send().getBlockNumber().longValue();
-        } catch (IOException e) {
-            throw new RuntimeException("Block number fetch failed", e);
+        long now = System.currentTimeMillis();
+        long cacheTtlMs = hardhatProperties.getBlockNumberCacheTtl().toMillis();
+
+        if (cachedBlockNumber != null && now - lastBlockNumberFetchTime < cacheTtlMs) {
+            return cachedBlockNumber;
+        }
+        synchronized (this) {
+            if (cachedBlockNumber != null && now - lastBlockNumberFetchTime < cacheTtlMs) {
+                return cachedBlockNumber;
+            }
+            try {
+                long blockNumber = web3j.ethBlockNumber().send().getBlockNumber().longValue();
+                cachedBlockNumber = blockNumber;
+                lastBlockNumberFetchTime = System.currentTimeMillis();
+                return blockNumber;
+            } catch (IOException e) {
+                throw new RuntimeException("Block number fetch failed", e);
+            }
         }
     }
 
@@ -63,6 +96,17 @@ public class HardhatBlockchainClient implements BlockchainClient {
     }
 
     @Override
+    public long fetchMinedTransactionCount(String address) {
+        try {
+            BigInteger count = web3j.ethGetTransactionCount(address, DefaultBlockParameterName.LATEST)
+                    .send().getTransactionCount();
+            return count.longValue();
+        } catch (IOException e) {
+            throw new RuntimeException(String.format("Failed to fetch mined nonce for %s", address), e);
+        }
+    }
+
+    @Override
     public SubmissionResult submitRawTransaction(String signedHexPayload, String fromAddress) {
         log.info("Starting transaction submission from address: {}", fromAddress);
 
@@ -76,6 +120,12 @@ public class HardhatBlockchainClient implements BlockchainClient {
                 EthSendTransaction result = web3j.ethSendRawTransaction(signedHexPayload).send();
                 if (result.hasError()) {
                     String errorMsg = result.getError().getMessage();
+                    if (errorMsg != null && (errorMsg.toLowerCase().contains("known transaction")
+                            || errorMsg.toLowerCase().contains("already known"))) {
+                        String hash = extractHash(errorMsg);
+                        log.info("Transaction already in mempool (retry={}). Hash: {}", retry, hash);
+                        return new SubmissionResult(hash, retry);
+                    }
                     throw new IllegalStateException(
                             String.format("Transaction submission error on retry %d: %s", retry, errorMsg));
                 }
@@ -121,5 +171,13 @@ public class HardhatBlockchainClient implements BlockchainClient {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
+    }
+
+    private String extractHash(String errorMsg) {
+        int index = errorMsg.indexOf("0x");
+        if (index != -1) {
+            return errorMsg.substring(index).trim();
+        }
+        return "UNKNOWN_HASH";
     }
 }

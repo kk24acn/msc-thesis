@@ -15,9 +15,9 @@ logger = logging.getLogger(__name__)
 
 
 class FaultType(str, Enum):
-    DROP_REQ = "DROP_REQ"
+    CRASH_RES = "CRASH_RES"
+    SILENT_DROP_RES = "SILENT_DROP_RES"
     DELAY = "DELAY"
-    DROP_RES = "DROP_RES"
     MUTATE = "MUTATE"
     REPLAY = "REPLAY"
 

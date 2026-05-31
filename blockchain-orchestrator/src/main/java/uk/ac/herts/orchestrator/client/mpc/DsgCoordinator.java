@@ -48,10 +48,12 @@ public class DsgCoordinator {
             Map<Integer, DsgServiceFutureStub> stubs,
             MpcProperties mpcProperties,
             SignatureAggregator signatureAggregator) {
+        int grpcConcurrencyLimit = mpcProperties.getGrpcConcurrencyLimit();
         this.stubs = stubs;
         this.mpcProperties = mpcProperties;
         this.signatureAggregator = signatureAggregator;
-        this.grpcConcurrencyLimit = new Semaphore(mpcProperties.getGrpcConcurrencyLimit());
+        this.grpcConcurrencyLimit = new Semaphore(grpcConcurrencyLimit, true);
+        log.info("{} initiated with GRPC_CONCURRENCY_LIMIT={}", this.getClass().getName(), grpcConcurrencyLimit);
     }
 
     public record DsgResult(SignatureData signature, int retries) {
@@ -111,14 +113,14 @@ public class DsgCoordinator {
                 log.info("DSG succeeded with session {}", dsgSessionId);
                 return new DsgResult(sigData, i);
             } catch (SignatureAggregationException e) {
-                log.warn("Signature aggregation failure occurred in quorum {}: {}. Retrying with next permutation.",
+                log.warn("Signature aggregation failure occurred in quorum {}: {}. Retrying with next permutation",
                         quorum, e.getMessage());
             } catch (Exception e) {
                 onlyAggregationFailures = false;
                 log.warn("Execution failure in quorum {}. Retrying...", quorum);
             }
         }
-        throw new SignatureGenerationException("All quorum permutations failed.", maxAttempts - 1, null,
+        throw new SignatureGenerationException("All quorum permutations failed", maxAttempts - 1, null,
                 onlyAggregationFailures);
     }
 
@@ -207,7 +209,7 @@ public class DsgCoordinator {
 
                 if (responses.get(0).hasSignatureShare()) {
                     SignatureData sigData = signatureAggregator.aggregate(responses, messageHash, expectedAddress);
-                    log.info("DSG signature obtained after {} rounds.", round);
+                    log.info("DSG signature obtained after {} rounds", round);
                     return sigData;
                 }
 

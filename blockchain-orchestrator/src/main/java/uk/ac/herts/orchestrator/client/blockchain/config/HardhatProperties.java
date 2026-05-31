@@ -14,4 +14,6 @@ public class HardhatProperties {
     private int maxRetries;
     private Long gasLimit;
     private Duration retryBackoff;
+    private Duration gasPriceCacheTtl;
+    private Duration blockNumberCacheTtl;
 }

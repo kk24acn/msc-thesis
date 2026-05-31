@@ -45,7 +45,7 @@ class ProxyControlPlaneClient:
 
     async def inject_all(
         self,
-        fault_type: Literal["DROP_REQ", "DROP_RES", "DELAY", "MUTATE", "REPLAY"],
+        fault_type: Literal["SILENT_DROP_RES", "CRASH_RES", "DELAY", "MUTATE", "REPLAY"],
         failure_rate: int = 100,
         metadata: dict[str, Any] | None = None,
         rounds: list[int] | None = None,

@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Callable
+from typing import Awaitable, Callable
 
 import grpc
 from grpc.aio import ServicerContext
@@ -12,6 +12,21 @@ from fault_state import DSG_TOTAL_ROUNDS, FaultConfig, FaultState, FaultType
 logger = logging.getLogger(__name__)
 
 
+async def _invoke(
+    coroutine: Awaitable[dsg_pb2.DsgPhaseResponse],
+    context: ServicerContext,
+    log_ctx: str,
+    on_error: Callable[[], None] | None = None,
+) -> dsg_pb2.DsgPhaseResponse:
+    try:
+        return await coroutine
+    except grpc.aio.AioRpcError as e:
+        logger.info(f"[FAULT_ERR] ExecuteDsgPhase | downstream={e.code().name}: {e.details()}, {log_ctx}")
+        if on_error:
+            on_error()
+        await context.abort(e.code(), e.details() or "")
+
+
 async def _handle_pre_request_faults(
     fault: FaultConfig | None,
     context: ServicerContext,
@@ -21,9 +36,6 @@ async def _handle_pre_request_faults(
         return
 
     match fault.fault_type:
-        case FaultType.DROP_REQ:
-            logger.info(f"[DROP_REQ] ExecuteDsgPhase | {log_ctx}")
-            await context.abort(grpc.StatusCode.UNAVAILABLE, "fault injection: request dropped")
         case FaultType.DELAY:
             delay_ms = fault.metadata.get("delay_ms", 0)
             logger.info(f"[DELAY] ExecuteDsgPhase | delay={delay_ms}ms, {log_ctx}")
@@ -32,11 +44,8 @@ async def _handle_pre_request_faults(
 
 async def _handle_request_faults(
     request: dsg_pb2.DsgPhaseRequest,
-    cache: dsg_pb2.DsgPhaseResponse | None,
     fault: FaultConfig | None,
     stub_function: Callable,
-    cache_function: Callable | None,
-    round_num: int,
     log_ctx: str,
 ) -> dsg_pb2.DsgPhaseResponse:
     if fault is None:
@@ -85,20 +94,6 @@ async def _handle_request_faults(
                     )
                 case _:
                     return await stub_function(request)
-        case FaultType.REPLAY:
-            if round_num != DSG_TOTAL_ROUNDS:
-                logger.info(f"[OK] ExecuteDsgPhase | {log_ctx}")
-                return await stub_function(request)
-
-            if cache is not None:
-                logger.info(f"[REPLAY] ExecuteDsgPhase | {log_ctx}")
-                return cache
-
-            logger.info(f"[REPLAY] Cache empty, bypassing fault and priming cache | {log_ctx}") # fmt: skip
-            response = await stub_function(request)
-            if cache_function:
-                cache_function(response)
-            return response
         case _:
             return await stub_function(request)
 
@@ -106,23 +101,26 @@ async def _handle_request_faults(
 async def _handle_post_request_faults(
     fault: FaultConfig | None,
     context: ServicerContext,
-    stub_function: Callable,
-    request: dsg_pb2.DsgPhaseRequest,
     log_ctx: str,
 ) -> None:
     if fault is None:
         return
 
     match fault.fault_type:
-        case FaultType.DROP_RES:
-            logger.info(f"[DROP_RES] ExecuteDsgPhase | {log_ctx}")
-            await context.abort(grpc.StatusCode.UNAVAILABLE, "fault injection: response dropped")
+        case FaultType.CRASH_RES:
+            logger.info(f"[CRASH_RES] ExecuteDsgPhase | {log_ctx}")
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "fault injection: response crashed")
+        case FaultType.SILENT_DROP_RES:
+            logger.info(f"[SILENT_DROP_RES] ExecuteDsgPhase | {log_ctx}")
+            await asyncio.Event().wait()
 
 
 class DsgServiceProxy(dsg_pb2_grpc.DsgServiceServicer):
     def __init__(self, stub: dsg_pb2_grpc.DsgServiceAsyncStub, fault_state: FaultState) -> None:
         self._stub = stub
         self._fault_state = fault_state
+        self._replay_priming_claimed: bool = False
+        self._replay_cache_event: asyncio.Event = asyncio.Event()
 
     def _trace_id(self, context: ServicerContext) -> str:
         metadata = context.invocation_metadata()
@@ -147,6 +145,43 @@ class DsgServiceProxy(dsg_pb2_grpc.DsgServiceServicer):
                         return 0
         return -1
 
+    async def _handle_replay_fault(
+        self,
+        request: dsg_pb2.DsgPhaseRequest,
+        context: ServicerContext,
+        round_num: int,
+        log_ctx: str,
+    ) -> dsg_pb2.DsgPhaseResponse:
+        if round_num != DSG_TOTAL_ROUNDS:
+            logger.info(f"[OK] ExecuteDsgPhase | {log_ctx}")
+            return await _invoke(self._stub.ExecuteDsgPhase(request), context, log_ctx)
+
+        live_cache = self._fault_state.get_cached_response()
+        if live_cache is not None:
+            logger.info(f"[REPLAY] ExecuteDsgPhase | {log_ctx}")
+            return live_cache
+
+        if not self._replay_priming_claimed:
+            self._replay_priming_claimed = True
+            logger.info(f"[REPLAY] Cache empty, bypassing fault and priming cache | {log_ctx}")
+            response = await _invoke(
+                self._stub.ExecuteDsgPhase(request),
+                context,
+                log_ctx,
+                on_error=self._replay_cache_event.set,
+            )
+            self._fault_state.cache_response(response)
+            self._replay_cache_event.set()
+            return response
+        else:
+            logger.info(f"[REPLAY] Waiting for cache primer | {log_ctx}")
+            await self._replay_cache_event.wait()
+            cached = self._fault_state.get_cached_response()
+            if cached is not None:
+                logger.info(f"[REPLAY] ExecuteDsgPhase (post-wait) | {log_ctx}")
+                return cached
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "fault injection: replay cache unavailable after primer failure") # fmt: skip
+
     async def ExecuteDsgPhase(
         self,
         request: dsg_pb2.DsgPhaseRequest,
@@ -155,25 +190,22 @@ class DsgServiceProxy(dsg_pb2_grpc.DsgServiceServicer):
         trace_id = self._trace_id(context)
         retry_count = self._retry_count(context)
         fault, round_num = self._fault_state.resolve_fault(
-            trace_id, retry_count, is_init=request.WhichOneof("payload") == "init"
+            trace_id,
+            retry_count,
+            is_init=request.WhichOneof("payload") == "init",
         )
         log_ctx = f"trace_id={trace_id}, round={round_num}, retry={retry_count}"
         if not fault:
             logger.info(f"[OK] ExecuteDsgPhase | {log_ctx}")
 
+        if fault and fault.fault_type == FaultType.REPLAY:
+            return await self._handle_replay_fault(request, context, round_num, log_ctx)
+
         await _handle_pre_request_faults(fault, context, log_ctx)
-        try:
-            response = await _handle_request_faults(
-                request,
-                self._fault_state.get_cached_response(),
-                fault,
-                self._stub.ExecuteDsgPhase,
-                self._fault_state.cache_response,
-                round_num,
-                log_ctx,
-            )
-        except grpc.aio.AioRpcError as e:
-            logger.info(f"[FAULT_ERR] ExecuteDsgPhase | downstream={e.code().name}: {e.details()}, {log_ctx}")
-            await context.abort(e.code(), e.details() or "")
-        await _handle_post_request_faults(fault, context, self._stub.ExecuteDsgPhase, request, log_ctx) # fmt: skip
+        response = await _invoke(
+            _handle_request_faults(request, fault, self._stub.ExecuteDsgPhase, log_ctx),
+            context,
+            log_ctx,
+        )
+        await _handle_post_request_faults(fault, context, log_ctx)
         return response

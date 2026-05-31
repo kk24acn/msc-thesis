@@ -26,6 +26,8 @@ const transformDbRecord = (dbTx) => {
     const isVerificationAbort = statusUpper === 'VERIFICATION_ABORT';
     const isInMempool = statusUpper === 'IN_MEMPOOL';
     const isStalled = statusUpper === 'STALLED';
+    const isSweeped = parseFloat(dbTx.amount_ether) === 0;
+    const sweeperAttempts = dbTx.sweeper_attempts ?? 0;
 
     let uiStatus = 'running';
     if (isConfirmed) uiStatus = 'completed';
@@ -106,6 +108,14 @@ const transformDbRecord = (dbTx) => {
         logs.push({ timestamp: formatTimestamp(new Date(dbTx.updated_at)), level: 'warning', message: 'Transaction stalled — queued in mempool awaiting transactions with smaller nonce' });
     }
 
+    if (isSweeped && sweeperAttempts > 0) {
+        logs.push({
+            timestamp: formatTimestamp(updatedAt || startTime),
+            level: 'warning',
+            message: `Transaction processed by nonce gap sweeper — zero-value fill submitted after ${sweeperAttempts} sweep attempt(s) to resolve nonce gap`,
+        });
+    }
+
     if (confirmedAt) {
         logs.push({ timestamp: formatTimestamp(confirmedAt), level: 'info', message: 'Transaction confirmed' });
     }
@@ -157,6 +167,11 @@ const transformDbRecord = (dbTx) => {
         startTime: startTime,
         updatedAt: updatedAt,
         progress: progress,
+        signingRetries: dbTx.signing_retries ?? 0,
+        submissionRetries: dbTx.submission_retries ?? 0,
+        sweeperAttempts,
+        isSweeped,
+        pureExecMs: confirmedAt && signingStartedAt ? confirmedAt.getTime() - signingStartedAt.getTime() : null,
         logs,
     };
 };

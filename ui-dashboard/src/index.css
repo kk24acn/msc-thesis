@@ -308,6 +308,11 @@ body {
   color: rgb(var(--darcula-warning));
 }
 
+.status-badge.sweeped {
+  background: rgb(var(--darcula-warning) / 0.15);
+  color: rgb(var(--darcula-warning));
+}
+
 .transaction-row {
   transition: all 0.2s ease;
 }

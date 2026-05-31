@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import subprocess
 import time
 
@@ -72,18 +73,34 @@ class DockerClient:
         except Exception as e:
             raise DockerClientError(f"Failed to restart hardhat: {e}") from e
 
-    async def restart_orchestrator(self, timeout_seconds: int = 60) -> None:
+    async def restart_orchestrator(
+        self,
+        timeout_seconds: int = 60,
+        env_overrides: dict[str, str] | None = None,
+    ) -> None:
         container_name = self._format_container_name("orchestrator")
         expected_message = "OrchestratorApplication - Started OrchestratorApplication in"
 
         logger.info("Restarting orchestrator container")
         try:
-            restart_time = await self._restart_container(container_name)
+            startup_time = time.time()
+            if env_overrides:
+                try:
+                    cmd = ["docker", "compose", "up", "-d", "--no-deps", "--force-recreate", "orchestrator"]
+                    env = {**os.environ, **env_overrides}
+                    await asyncio.to_thread(subprocess.run, cmd, check=True, capture_output=True, env=env)
+                    logger.debug(f"Orchestrator recreated with env overrides: {list(env_overrides.keys())}")
+                except subprocess.CalledProcessError as e:
+                    raise DockerClientError(f"Failed to recreate orchestrator: {e.stderr.decode()}") from e
+            else:
+                startup_time = await self._restart_container(container_name)
 
-            if await self._wait_for_log(container_name, expected_message, timeout_seconds, restart_time):
+            if await self._wait_for_log(container_name, expected_message, timeout_seconds, startup_time):
                 logger.info("Orchestrator is ready")
             else:
                 logger.warning(f"Orchestrator did not confirm readiness in time")
+        except DockerClientError:
+            raise
         except Exception as e:
             raise DockerClientError(f"Failed to restart orchestrator: {e}") from e
 

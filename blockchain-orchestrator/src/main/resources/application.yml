@@ -11,7 +11,6 @@ spring:
   main:
     web-application-type: servlet
 
-  # DB
   datasource:
     username: ${DB_USERNAME:kapellmeister}
     password: ${DB_PASSWORD:bach}
@@ -23,18 +22,26 @@ spring:
     show-sql: false
     open-in-view: false
 
-  # Hardhat
   hardhat:
     rpc-url: ${HARDHAT_RPC_URL:http://127.0.0.1:8545}
     max-retries: ${HARDHAT_MAX_RETRIES:3}
     gas-limit: ${HARDHAT_GAS_LIMIT:21000}
     retry-backoff: ${HARDHAT_RETRY_BACKOFF:300ms}
-    block-indexer-interval-ms: ${HARDHAT_BLOCK_INDEXER_INTERVAL_MS:1000}
+    gas-price-cache-ttl: ${HARDHAT_GAS_PRICE_CACHE_TTL:2s}
+    block-number-cache-ttl: ${HARDHAT_BLOCK_NUMBER_CACHE_TTL:2s}
+    block-confirmation-poller:
+      interval-ms: ${HARDHAT_BLOCK_CONFIRMATION_POLLER_INTERVAL_MS:5000}
+    submission-worker:
+      interval-ms: ${HARDHAT_SUBMISSION_WORKER_INTERVAL_MS:1000}
+      max-mempool-queue-size: ${HARDHAT_MAX_MEMPOOL_QUEUE_SIZE:60}
 
   mpc:
-    grpc-concurrency-limit: ${GRPC_CONCURRENCY_LIMIT:100}
+    grpc-concurrency-limit: ${GRPC_CONCURRENCY_LIMIT:10}
     signer-addresses: ${SIGNER_RPC_URLS:127.0.0.1:50051,127.0.0.1:50052,127.0.0.1:50053}
     dsg:
       max-retries: ${DSG_MAX_RETRIES:3}
       request-timeout: ${DSG_REQUEST_TIMEOUT:10s}
       eth-derivation-path: ${DSG_ETH_DERIVATION_PATH:m/0}
+    nonce-gap-sweeper:
+      enabled: ${NONCE_GAP_SWEEPER_ENABLED:true}
+      interval-ms: ${NONCE_GAP_SWEEPER_INTERVAL_MS:5000}

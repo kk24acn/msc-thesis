@@ -25,7 +25,7 @@ export default defineConfig({
       chainType: "l1",
       mining: {
         auto: false,
-        interval: 1000
+        interval: 5000
       }
     },
     hardhatOp: {
@@ -33,7 +33,7 @@ export default defineConfig({
       chainType: "op",
       mining: {
         auto: false,
-        interval: 1000
+        interval: 5000
       }
     },
     sepolia: {

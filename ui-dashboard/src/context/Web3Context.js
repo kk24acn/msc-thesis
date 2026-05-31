@@ -9,7 +9,6 @@ export const Web3Provider = ({ children }) => {
     const [signers, setSigners] = useState([]);
     const [mpcKeyMetadata, setMpcKeyMetadata] = useState({});
     const [funderAccounts, setFunderAccounts] = useState([]);
-    const [transactions, setTransactions] = useState([]);
     const [error, setError] = useState(null);
 
     useEffect(() => {
@@ -65,37 +64,20 @@ export const Web3Provider = ({ children }) => {
             setSigners(signersBalances);
 
             const allAccounts = await provider.listAccounts();
-            const mpcAddresses = new Set(addressList);
-            const funderList = allAccounts.filter(addr => !mpcAddresses.has(addr));
+            const mpcAddresses = new Set(addressList.map(a => a.toLowerCase()));
+            const funderList = allAccounts.filter(signer => {
+                const addr = typeof signer === 'string' ? signer : signer.address;
+                return !mpcAddresses.has(addr.toLowerCase());
+            });
 
             const fundersBalances = await Promise.all(
-                funderList.map(async (address) => {
-                    const balance = await provider.getBalance(address);
-                    return { address, balance: ethers.formatEther(balance) };
+                funderList.map(async (signer) => {
+                    const addr = typeof signer === 'string' ? signer : signer.address;
+                    const balance = await provider.getBalance(addr);
+                    return { address: addr, balance: ethers.formatEther(balance) };
                 })
             );
             setFunderAccounts(fundersBalances);
-
-            const latestBlock = await provider.getBlock('latest');
-            if (latestBlock && latestBlock.transactions) {
-                const txList = latestBlock.transactions;
-                const transactionDetails = await Promise.all(
-                    txList.map(async (txHash) => {
-                        const tx = await provider.getTransaction(txHash);
-                        return {
-                            hash: tx.hash,
-                            from: tx.from,
-                            to: tx.to,
-                            gasPrice: ethers.formatUnits(tx.gasPrice, 'gwei'),
-                            amount: ethers.formatEther(tx.value),
-                            status: 'Confirmed',
-                            startTime: new Date().toLocaleTimeString(),
-                            endTime: '',
-                        };
-                    })
-                );
-                setTransactions(transactionDetails);
-            }
 
             setError(null);
         } catch (err) {
@@ -133,7 +115,7 @@ export const Web3Provider = ({ children }) => {
     }, [provider, isPolling]);
 
     return (
-        <Web3Context.Provider value={{ provider, signers, mpcKeyMetadata, funderAccounts, transactions, error, refresh: fetchBlockchainData }}>
+        <Web3Context.Provider value={{ provider, signers, mpcKeyMetadata, funderAccounts, error, refresh: fetchBlockchainData }}>
             {children}
         </Web3Context.Provider>
     );

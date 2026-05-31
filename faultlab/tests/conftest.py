@@ -48,22 +48,14 @@ async def setup_and_fund_mpc_accounts(
         raise
 
 
-@pytest.fixture(scope="session")
-def event_loop():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    yield loop
-    loop.close()
-
-
-@pytest.fixture(scope="session")
+@pytest.fixture
 async def db_pool():
     pool = await asyncpg.create_pool(dsn=settings.DATABASE_URL)
     yield pool
     await pool.close()
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def http_client():
     client = httpx.AsyncClient(timeout=settings.HTTP_TIMEOUT)
     yield client
@@ -77,7 +69,7 @@ def http_client():
         pass
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def orchestrator_client(http_client: httpx.AsyncClient) -> OrchestratorClient:
     if not settings.ORCHESTRATOR_URL:
         pytest.skip("ORCHESTRATOR_URL not configured")
@@ -161,6 +153,7 @@ def mpc_accounts(mpc_keys_repository: MpcKeysRepository) -> list[tuple[str, str]
 @pytest.fixture(autouse=True)
 def collect_db_state(
     request: pytest.FixtureRequest,
+    docker_client: DockerClient,
     transactions_repository: TransactionsRepository,
 ):
     """Save the transactions table to CSV after test completion.
@@ -169,44 +162,59 @@ def collect_db_state(
     (CONFIRMED / STALLED / FAILED / CRYPTOGRAPHIC_ABORT), then writes a CSV to tests/results/.
     Times out after 120s, logs a warning, and saves the partial snapshot
     without failing the test.
+
+    Marker kwargs:
+    - results_subdir: str  — subdirectory under tests/results/ (default: "")
+    - disable_ui: bool     — stop dashboard containers before the test and restart them
+                             after DB stabilises + CSV is saved (default: False)
     """
+    marker = request.node.get_closest_marker("collect_db_state")
+    disable_ui = marker.kwargs.get("disable_ui", False) if marker else False
+
+    if disable_ui:
+        asyncio.run(docker_client.stop_dashboard_containers())
 
     yield
 
-    if request.node.get_closest_marker("collect_db_state") is None:
+    if marker is None:
         return
 
     if not settings.DATABASE_URL:
         logger.warning("DATABASE_URL not configured, skipping CSV export")
+        if disable_ui:
+            asyncio.run(docker_client.start_dashboard_containers())
         return
 
-    marker = request.node.get_closest_marker("collect_db_state")
     results_subdir = marker.kwargs.get("results_subdir", "")
     results_dir = Path(__file__).parent.joinpath("results")
     if results_subdir:
         results_dir = results_dir.joinpath(results_subdir)
     results_dir.mkdir(parents=True, exist_ok=True)
 
-    POLL_INTERVAL_S = 10
-    TIMEOUT_S = 120
-    elapsed = 0
-    df = transactions_repository.fetch_all()
-
-    while elapsed < TIMEOUT_S:
-        pending = int((~df["status"].isin(TERMINAL_STATUSES)).sum()) if not df.empty else 0
-        if pending == 0:
-            break
-        logger.info(f"{pending} transactions still pending ({elapsed}s elapsed) — waiting {POLL_INTERVAL_S}s...")
-        time.sleep(POLL_INTERVAL_S)
-        elapsed += POLL_INTERVAL_S
+    try:
+        POLL_INTERVAL_S = 10
+        TIMEOUT_S = 500
+        elapsed = 0
         df = transactions_repository.fetch_all()
-    else:
-        pending = int((~df["status"].isin(TERMINAL_STATUSES)).sum()) if not df.empty else 0
-        logger.warning(f"Timed out after {TIMEOUT_S}s with {pending} transactions still not in terminal status")
 
-    test_name = request.node.name.replace("[", "_").replace("]", "").replace("/", "_")
-    csv_path = save_transactions_csv(df, results_dir, test_name)
-    logger.info(f"Saved {len(df):,} row(s) -> {csv_path}")
+        while elapsed < TIMEOUT_S:
+            pending = int((~df["status"].isin(TERMINAL_STATUSES)).sum()) if not df.empty else 0
+            if pending == 0:
+                break
+            logger.info(f"{pending} transactions still pending ({elapsed}s elapsed) — waiting {POLL_INTERVAL_S}s...")
+            time.sleep(POLL_INTERVAL_S)
+            elapsed += POLL_INTERVAL_S
+            df = transactions_repository.fetch_all()
+        else:
+            pending = int((~df["status"].isin(TERMINAL_STATUSES)).sum()) if not df.empty else 0
+            logger.warning(f"Timed out after {TIMEOUT_S}s with {pending} transactions still not in terminal status")
+
+        test_name = request.node.name.replace("[", "_").replace("]", "").replace("/", "_")
+        csv_path = save_transactions_csv(df, results_dir, test_name)
+        logger.info(f"Saved {len(df):,} row(s) -> {csv_path}")
+    finally:
+        if disable_ui:
+            asyncio.run(docker_client.start_dashboard_containers())
 
 
 @pytest.fixture(autouse=True)
@@ -238,8 +246,11 @@ def blockchain_refresh(
     marker = request.node.get_closest_marker("blockchain_refresh")
     num_accounts = marker.kwargs.get("num_accounts", 10)
     funding_amount_eth = marker.kwargs.get("funding_amount_eth", "10000")
+    grpc_concurrency_limit = marker.kwargs.get("grpc_concurrency_limit", None)
 
     logger.info(f"Blockchain refresh triggered for test (num_accounts={num_accounts}, funding={funding_amount_eth} ETH)") # fmt: skip
+
+    orchestrator_env = ({"GRPC_CONCURRENCY_LIMIT": str(grpc_concurrency_limit)} if grpc_concurrency_limit is not None else None) # fmt: skip
 
     async def refresh():
         await asyncio.gather(
@@ -249,7 +260,7 @@ def blockchain_refresh(
             asyncio.to_thread(mpc_keys_repository.truncate),
         )
         await asyncio.gather(
-            docker_client.restart_orchestrator(),
+            docker_client.restart_orchestrator(env_overrides=orchestrator_env),
             docker_client.restart_proxies(),
             setup_and_fund_mpc_accounts(
                 mpc_keys_repository,
@@ -268,7 +279,7 @@ async def inject_fault(request: pytest.FixtureRequest, proxy_client: ProxyContro
     """Automatically inject faults before test if marked with @pytest.mark.inject_fault.
 
     Marker accepts keyword arguments:
-    - fault_type: Literal["DROP_REQ", "DROP_RES", "DELAY", "MUTATE", "REPLAY"] - Type of fault to inject
+    - fault_type: Literal["SILENT_DROP_RES", "CRASH_RES", "DELAY", "MUTATE", "REPLAY"] - Type of fault to inject
     - failure_rate: int - Failure rate percentage (1-100)
     - metadata: dict - Fault-specific metadata (see per-fault-type keys below)
     - rounds: list[int] | None - 1-indexed rounds to target (1=Init, 2-4=Advance); None = all rounds
@@ -276,36 +287,38 @@ async def inject_fault(request: pytest.FixtureRequest, proxy_client: ProxyContro
     - inject_until_retry: int | None - stop injecting after this retry count (0=first attempt only, 1=first attempt + first retry, …); None = fault every attempt
 
     Metadata keys by fault type:
-    - DROP_REQ / DROP_RES: no metadata keys (metadata is ignored)
-    - DELAY:  delay_ms (int, default 0)      — milliseconds to sleep before forwarding
-    - MUTATE: byte_offset (int, default 10)  — offset from the END of the payload bytes; targets fixed-size crypto fields
-              xor_mask   (int, default 0xFF) — XOR mask applied to that byte
-    - REPLAY: (no metadata keys) — on round 4, returns the cached response from the first session instead of forwarding to the signer
+    - SILENT_DROP_RES:  (no metadata keys)              — silently cancels the RPC context after the signer processes; orchestrator times out
+    - CRASH_RES:        (no metadata keys)              — aborts the gRPC connection with UNAVAILABLE after the signer processes
+    - DELAY:            delay_ms (int, default 0)       — milliseconds to sleep before forwarding
+    - MUTATE:           byte_offset (int, default 10)   — offset from the END of the payload bytes; targets fixed-size crypto fields
+                        xor_mask   (int, default 0xFF)  — XOR mask applied to that byte
+    - REPLAY:           (no metadata keys)              — on round 4, returns the cached response from the first session instead of forwarding to the signer
     """
 
-    marker: pytest.Mark = request.node.get_closest_marker("inject_fault")
-    if marker is None:
+    markers = list(request.node.iter_markers("inject_fault"))
+    if not markers:
         return
 
-    fault_type = marker.kwargs.get("fault_type", None)
-    failure_rate = marker.kwargs.get("failure_rate", 0)
-    metadata = marker.kwargs.get("metadata", {})
-    rounds = marker.kwargs.get("rounds", None)
-    signers = marker.kwargs.get("signers", None)
-    inject_until_retry = marker.kwargs.get("inject_until_retry", None)
+    for marker in markers:
+        fault_type = marker.kwargs.get("fault_type", None)
+        failure_rate = marker.kwargs.get("failure_rate", 0)
+        metadata = marker.kwargs.get("metadata", {})
+        rounds = marker.kwargs.get("rounds", None)
+        signers = marker.kwargs.get("signers", None)
+        inject_until_retry = marker.kwargs.get("inject_until_retry", None)
 
-    try:
-        if fault_type and failure_rate:
-            await proxy_client.inject_all(
-                fault_type=fault_type,
-                failure_rate=failure_rate,
-                metadata=metadata,
-                rounds=rounds,
-                signers=signers,
-                inject_until_retry=inject_until_retry,
-            )
-        else:
-            logger.info(f"Fault injection skipped (type={fault_type}, rate={failure_rate}%)")
-    except Exception as e:
-        logger.error(f"Failed to inject fault for {request.node.name}: {e}")
-        raise
+        try:
+            if fault_type and failure_rate:
+                await proxy_client.inject_all(
+                    fault_type=fault_type,
+                    failure_rate=failure_rate,
+                    metadata=metadata,
+                    rounds=rounds,
+                    signers=signers,
+                    inject_until_retry=inject_until_retry,
+                )
+            else:
+                logger.info(f"Fault injection skipped (type={fault_type}, rate={failure_rate}%)")
+        except Exception as e:
+            logger.error(f"Failed to inject fault for {request.node.name}: {e}")
+            raise

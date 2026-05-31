@@ -4,8 +4,6 @@ import jakarta.persistence.*;
 import lombok.*;
 import uk.ac.herts.orchestrator.repository.model.TransactionStatus;
 
-import org.web3j.protocol.core.methods.response.TransactionReceipt;
-
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -49,6 +47,9 @@ public class Transaction {
     @Column(name = "submission_retries")
     private Integer submissionRetries;
 
+    @Column(name = "sweeper_attempts")
+    private Integer sweeperAttempts;
+
     @Column(name = "nonce")
     private Long nonce;
 
@@ -88,9 +89,6 @@ public class Transaction {
     @Version
     @Column(name = "version")
     private Long version;
-
-    @Transient
-    private TransactionReceipt receipt;
 
     public void touchUpdatedAt() {
         this.updatedAt = OffsetDateTime.now(ZoneOffset.UTC);

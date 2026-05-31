@@ -8,6 +8,7 @@ import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 import uk.ac.herts.orchestrator.repository.entity.Transaction;
+import uk.ac.herts.orchestrator.repository.model.TransactionStatus;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -16,6 +17,10 @@ import java.util.UUID;
 
 @Repository
 public interface TransactionRepository extends JpaRepository<Transaction, UUID> {
+    List<Transaction> findByStatusOrderByNonceAsc(TransactionStatus status);
+
+    List<Transaction> findByStatusInOrderByNonceAsc(List<TransactionStatus> statuses);
+
     Optional<Transaction> findByFromAddressAndNonce(String fromAddress, Long nonce);
 
     @Modifying

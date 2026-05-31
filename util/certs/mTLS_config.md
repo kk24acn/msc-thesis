@@ -1,3 +1,5 @@
+# IMPORTANT: mTLS is not configured on the project by default. These certificates and commands were executed as a part of experiment and are left for the reference. 
+
 >Run From `./util/certs` folder
 
 ## Generate CA

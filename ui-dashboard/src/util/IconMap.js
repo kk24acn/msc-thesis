@@ -16,5 +16,6 @@ export const statusIcons = {
     verification_abort: <ShieldAlert className="w-4 h-4" />,
     in_mempool: <Clock className="w-4 h-4" />,
     stalled: <AlertTriangle className="w-4 h-4" />,
+    sweeped: <AlertTriangle className="w-4 h-4" />,
     pending: <Circle className="w-4 h-4 text-darcula-muted" />,
 };

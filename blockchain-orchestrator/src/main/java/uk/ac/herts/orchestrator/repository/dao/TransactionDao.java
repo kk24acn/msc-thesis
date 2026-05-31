@@ -54,13 +54,14 @@ public class TransactionDao {
         return repository.save(fresh);
     }
 
-    public Transaction markSigned(Transaction transaction, String hexPayload) {
+    public Transaction markSigned(Transaction transaction, String hexPayload, int signingRetries) {
         Transaction fresh = repository.findById(transaction.getId()).orElse(transaction);
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         fresh.setStatus(TransactionStatus.SIGNED);
         fresh.setSignedHexPayload(hexPayload);
-        fresh.setSigningRetries(transaction.getSigningRetries());
-        fresh.setSignedAt(now);
+        fresh.setSigningRetries(signingRetries);
+        fresh.setSigningStartedAt(transaction.getSigningStartedAt());
+        fresh.setSignedAt(transaction.getSignedAt());
         fresh.setUpdatedAt(now);
         return repository.save(fresh);
     }
@@ -72,11 +73,12 @@ public class TransactionDao {
     }
 
     public Transaction markInMempool(Transaction transaction, String transactionHash,
-            long submissionBlock) {
+            long submissionBlock, int submissionRetries) {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         transaction.setStatus(TransactionStatus.IN_MEMPOOL);
         transaction.setHash(transactionHash);
         transaction.setSubmissionBlock(submissionBlock);
+        transaction.setSubmissionRetries(submissionRetries);
         transaction.setSubmittedAt(now);
         transaction.setUpdatedAt(now);
         return repository.save(transaction);
@@ -89,11 +91,15 @@ public class TransactionDao {
     }
 
     public Transaction markFailed(Transaction transaction, String errorMessage) {
+        return markFailed(transaction, errorMessage, 0);
+    }
+
+    public Transaction markFailed(Transaction transaction, String errorMessage, int submissionRetries) {
         Transaction fresh = repository.findById(transaction.getId()).orElse(transaction);
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         fresh.setStatus(TransactionStatus.FAILED);
         fresh.setErrorMessage(errorMessage);
-        fresh.setSubmissionRetries(transaction.getSubmissionRetries());
+        fresh.setSubmissionRetries(submissionRetries);
         fresh.setFailedAt(now);
         fresh.setUpdatedAt(now);
         return repository.save(fresh);
@@ -122,6 +128,26 @@ public class TransactionDao {
     public int confirmTransactions(List<String> hashes, Long blockNumber) {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         return repository.confirmTransactions(hashes, blockNumber, now);
+    }
+
+    public Transaction incrementSweeperAttempts(Transaction transaction) {
+        Transaction fresh = repository.findById(transaction.getId()).orElse(transaction);
+        int current = fresh.getSweeperAttempts() == null ? 0 : fresh.getSweeperAttempts();
+        fresh.setSweeperAttempts(current + 1);
+        fresh.setAmountEther(BigDecimal.ZERO);
+        fresh.touchUpdatedAt();
+        return repository.save(fresh);
+    }
+
+    public List<Transaction> findTransactionsByStatusOrderedByNonce(TransactionStatus status) {
+        return repository.findByStatusOrderByNonceAsc(status);
+    }
+
+    public List<Transaction> findFailedTransactionsOrderedByNonce() {
+        return repository.findByStatusInOrderByNonceAsc(List.of(
+                TransactionStatus.CRYPTOGRAPHIC_ABORT,
+                TransactionStatus.VERIFICATION_ABORT,
+                TransactionStatus.FAILED));
     }
 
     public Optional<Transaction> findByFromAddressAndNonce(String fromAddress, Long nonce) {

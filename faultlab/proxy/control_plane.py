@@ -36,6 +36,11 @@ def _parse_fault_config(payload: dict) -> FaultConfig:
         if not isinstance(inject_until_retry, int) or inject_until_retry < 0:
             raise ValueError("inject_until_retry must be a non-negative integer")
 
+    until_trace_id = payload.get("until_trace_id")
+    if until_trace_id is not None:
+        if not isinstance(until_trace_id, int) or until_trace_id < 0:
+            raise ValueError("until_trace_id must be a non-negative integer")
+
     return FaultConfig(
         enabled=payload.get("enabled", False),
         fault_type=fault_type,
@@ -43,6 +48,7 @@ def _parse_fault_config(payload: dict) -> FaultConfig:
         metadata=payload.get("metadata", {}),
         rounds=rounds,
         inject_until_retry=inject_until_retry,
+        until_trace_id=until_trace_id,
     )
 
 
@@ -65,7 +71,8 @@ class ControlPlane:
                     f"Fault configuration updated: {fault_config.fault_type} ("
                     f"enabled={fault_config.enabled}, rate={fault_config.failure_rate}%, "
                     f"metadata={fault_config.metadata}, rounds={fault_config.rounds}, "
-                    f"until_retry={fault_config.inject_until_retry})"
+                    f"until_retry={fault_config.inject_until_retry}, "
+                    f"until_trace_id={fault_config.until_trace_id})"
                 )
                 return jsonify({"status": "ok", "fault": fault_config.__dict__})
             except Exception as e:

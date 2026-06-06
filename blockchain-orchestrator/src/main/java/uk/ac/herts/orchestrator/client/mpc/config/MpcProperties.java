@@ -20,6 +20,7 @@ public class MpcProperties {
     private int grpcConcurrencyLimit;
     private String signerAddresses;
     private DsgProperties dsg = new DsgProperties();
+    private QuarantineProperties quarantine = new QuarantineProperties();
 
     public List<SignerNode> getSigners() {
         if (signerAddresses != null && !signerAddresses.trim().isEmpty()) {
@@ -54,7 +55,16 @@ public class MpcProperties {
     @Setter
     public static class DsgProperties {
         private int maxRetries;
+        private int maxRounds;
         private Duration requestTimeout;
         private String ethDerivationPath;
+    }
+
+    @Getter
+    @Setter
+    public static class QuarantineProperties {
+        private boolean enabled = true;
+        private long evictionIntervalMs;
+        private Duration ttl = Duration.ofSeconds(30);
     }
 }

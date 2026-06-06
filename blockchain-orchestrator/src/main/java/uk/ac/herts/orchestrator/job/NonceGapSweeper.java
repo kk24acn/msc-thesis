@@ -63,7 +63,7 @@ public class NonceGapSweeper {
                         BigInteger.ZERO);
 
                 TransactionSigner.SignResult signResult = transactionSigner.sign(rawTx, tx, mpcKey);
-                transactionDao.markSigned(tx, signResult.hexPayload(), signResult.retries());
+                transactionDao.markSweeperSigned(tx, signResult.hexPayload(), signResult.retries());
                 log.info("Successfully signed gap-filler for transaction {} at nonce {}", tx.getId(), tx.getNonce());
             } catch (Exception e) {
                 log.warn("Sweeper failed to sign gap-filler for transaction {} at nonce {}. Will retry next cycle",

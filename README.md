@@ -56,3 +56,12 @@ for (let i = 0; i < signers.length; i++) {
   console.log(`Account ${i}: ${address} — ${balanceEth} ETH`);
 }
 ```
+
+## Third-Party Software and Licensing
+This project leverages the following open-source technologies:
+- Spring Boot 4 (Apache License 2.0)
+- Hardhat 3 (MIT License)
+- React 19 (MIT License)
+- PostgreSQL 18 (PostgreSQL License)
+
+The isolated signing nodes utilize the `dkls23-ll` library from Silence Laboratories. This components is governed strictly by the Silence Laboratories Non-Commercial Use License Agreement preserved in the LICENSE and NOTICE files of this repository.

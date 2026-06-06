@@ -1,4 +1,4 @@
-package uk.ac.herts.orchestrator.exception;
+package uk.ac.herts.orchestrator.exception.blockchain;
 
 public class BlockchainRpcException extends RuntimeException {
     private final int retries;

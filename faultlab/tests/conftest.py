@@ -285,6 +285,7 @@ async def inject_fault(request: pytest.FixtureRequest, proxy_client: ProxyContro
     - rounds: list[int] | None - 1-indexed rounds to target (1=Init, 2-4=Advance); None = all rounds
     - signers: list[int] | int | None - 1-indexed signers to disrupt; int = N randomly selected signers; None = all signers
     - inject_until_retry: int | None - stop injecting after this retry count (0=first attempt only, 1=first attempt + first retry, …); None = fault every attempt
+    - until_trace_id: int | None - stop injecting for requests with trace id strictly greater than this value; None = fault every trace id
 
     Metadata keys by fault type:
     - SILENT_DROP_RES:  (no metadata keys)              — silently cancels the RPC context after the signer processes; orchestrator times out
@@ -306,6 +307,7 @@ async def inject_fault(request: pytest.FixtureRequest, proxy_client: ProxyContro
         rounds = marker.kwargs.get("rounds", None)
         signers = marker.kwargs.get("signers", None)
         inject_until_retry = marker.kwargs.get("inject_until_retry", None)
+        until_trace_id = marker.kwargs.get("until_trace_id", None)
 
         try:
             if fault_type and failure_rate:
@@ -316,6 +318,7 @@ async def inject_fault(request: pytest.FixtureRequest, proxy_client: ProxyContro
                     rounds=rounds,
                     signers=signers,
                     inject_until_retry=inject_until_retry,
+                    until_trace_id=until_trace_id,
                 )
             else:
                 logger.info(f"Fault injection skipped (type={fault_type}, rate={failure_rate}%)")

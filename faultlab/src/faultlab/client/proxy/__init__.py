@@ -51,6 +51,7 @@ class ProxyControlPlaneClient:
         rounds: list[int] | None = None,
         signers: list[int] | int | None = None,
         inject_until_retry: int | None = None,
+        until_trace_id: int | None = None,
     ) -> None:
         urls = self._urls
 
@@ -74,12 +75,14 @@ class ProxyControlPlaneClient:
             payload["rounds"] = rounds
         if inject_until_retry is not None:
             payload["inject_until_retry"] = inject_until_retry
+        if until_trace_id is not None:
+            payload["until_trace_id"] = until_trace_id
 
         await self._gather_and_verify([self._post(url, "/inject", payload) for url in urls], urls=urls)
 
         logger.info(
             f"Injected {fault_type} on signers={signers} (rate={failure_rate}%, "
-            f"rounds={rounds}, until_retry={inject_until_retry})"
+            f"rounds={rounds}, until_retry={inject_until_retry}, until_trace_id={until_trace_id})"
         )
 
     async def reset_all(self) -> None:

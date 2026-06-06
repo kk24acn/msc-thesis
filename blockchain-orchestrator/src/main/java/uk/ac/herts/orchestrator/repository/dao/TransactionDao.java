@@ -11,6 +11,7 @@ import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -66,6 +67,17 @@ public class TransactionDao {
         return repository.save(fresh);
     }
 
+    public Transaction markSweeperSigned(Transaction transaction, String hexPayload, int signingRetries) {
+        Transaction fresh = repository.findById(transaction.getId()).orElse(transaction);
+        Integer sweeperRetriesRem = Objects.requireNonNullElse(fresh.getSweeperSigningRetries(), 0);
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        fresh.setStatus(TransactionStatus.SIGNED);
+        fresh.setSignedHexPayload(hexPayload);
+        fresh.setSweeperSigningRetries(sweeperRetriesRem + signingRetries);
+        fresh.setUpdatedAt(now);
+        return repository.save(fresh);
+    }
+
     public Transaction markSubmitting(Transaction transaction) {
         transaction.setStatus(TransactionStatus.SUBMITTING);
         transaction.touchUpdatedAt();
@@ -111,6 +123,7 @@ public class TransactionDao {
         fresh.setStatus(TransactionStatus.CRYPTOGRAPHIC_ABORT);
         fresh.setErrorMessage(errorMessage);
         fresh.setSigningRetries(transaction.getSigningRetries());
+        fresh.setFailedAt(now);
         fresh.setUpdatedAt(now);
         return repository.save(fresh);
     }
@@ -121,6 +134,7 @@ public class TransactionDao {
         fresh.setStatus(TransactionStatus.VERIFICATION_ABORT);
         fresh.setErrorMessage(errorMessage);
         fresh.setSigningRetries(transaction.getSigningRetries());
+        fresh.setFailedAt(now);
         fresh.setUpdatedAt(now);
         return repository.save(fresh);
     }

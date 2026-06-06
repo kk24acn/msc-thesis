@@ -239,6 +239,37 @@ body {
   background: rgb(var(--darcula-muted));
 }
 
+.stage-node.warning {
+  border-color: rgb(var(--darcula-warning));
+  background: rgb(var(--darcula-warning));
+}
+
+.stage-node.sweeped {
+  border-color: rgb(var(--darcula-warning));
+  background: rgb(var(--darcula-warning));
+}
+
+.stage-node.stalled {
+  border-color: rgb(var(--darcula-warning));
+  background: rgb(var(--darcula-bg));
+  animation: pulse-warning 1.5s ease-in-out infinite;
+}
+
+.stage-node.in_mempool {
+  border-color: rgb(var(--darcula-purple));
+  background: rgb(var(--darcula-purple));
+}
+
+.stage-node.crypto_abort {
+  border-color: rgb(var(--darcula-accent));
+  background: rgb(var(--darcula-accent));
+}
+
+.stage-node.verification_abort {
+  border-color: rgb(var(--darcula-warning));
+  background: rgb(var(--darcula-accent));
+}
+
 @keyframes pulse {
 
   0%,
@@ -248,6 +279,18 @@ body {
 
   50% {
     box-shadow: 0 0 0 8px rgb(var(--darcula-cyan) / 0);
+  }
+}
+
+@keyframes pulse-warning {
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(var(--darcula-warning) / 0.4);
+  }
+
+  50% {
+    box-shadow: 0 0 0 8px rgb(var(--darcula-warning) / 0);
   }
 }
 
@@ -309,6 +352,11 @@ body {
 }
 
 .status-badge.sweeped {
+  background: rgb(var(--darcula-warning) / 0.15);
+  color: rgb(var(--darcula-warning));
+}
+
+.status-badge.warning {
   background: rgb(var(--darcula-warning) / 0.15);
   color: rgb(var(--darcula-warning));
 }

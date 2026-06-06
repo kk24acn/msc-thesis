@@ -9,18 +9,20 @@ public final class ErrorUtils {
         StringBuilder sb = new StringBuilder();
         sb.append(phase).append(".");
 
-        String mainMsg = e.getMessage();
-        if (mainMsg != null && !mainMsg.isEmpty()) {
-            sb.append(" ").append(mainMsg);
-        }
-
-        Throwable cause = e.getCause();
-        if (cause != null) {
-            String causeMsg = cause.getMessage();
-            if (causeMsg != null && !causeMsg.isEmpty()) {
-                sb.append(" (Root cause: ").append(cause.getClass().getSimpleName())
-                        .append(" - ").append(causeMsg).append(")");
+        Throwable current = e;
+        int depth = 0;
+        while (current != null && depth < 5) {
+            String msg = current.getMessage();
+            if (msg != null && !msg.isEmpty()) {
+                if (depth == 0) {
+                    sb.append(" ").append(msg);
+                } else {
+                    sb.append(" (Caused by: ").append(current.getClass().getSimpleName())
+                            .append(" - ").append(msg).append(")");
+                }
             }
+            current = current.getCause();
+            depth++;
         }
 
         return sb.toString();

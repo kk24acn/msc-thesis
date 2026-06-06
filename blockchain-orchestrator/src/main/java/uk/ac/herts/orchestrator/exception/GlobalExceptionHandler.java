@@ -4,9 +4,12 @@ import java.util.stream.Collectors;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import uk.ac.herts.orchestrator.api.dto.ApiErrorResponse;
 import lombok.extern.slf4j.Slf4j;
 
@@ -22,16 +25,22 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(new ApiErrorResponse("VALIDATION_ERROR", message));
     }
 
-    @ExceptionHandler(TransactionSubmissionException.class)
-    public ResponseEntity<ApiErrorResponse> handleSubmissionFailure(TransactionSubmissionException exception) {
-        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
-                .body(new ApiErrorResponse("TRANSACTION_SUBMISSION_FAILED", exception.getMessage()));
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiErrorResponse> handleMalformedJson(HttpMessageNotReadableException exception) {
+        return ResponseEntity.badRequest()
+                .body(new ApiErrorResponse("MALFORMED_REQUEST", "The request body is missing or contains invalid JSON"));
     }
 
-    @ExceptionHandler(TransactionSigningException.class)
-    public ResponseEntity<ApiErrorResponse> handleSigningFailure(TransactionSigningException exception) {
-        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
-                .body(new ApiErrorResponse("TRANSACTION_SIGNING_FAILED", exception.getMessage()));
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiErrorResponse> handleMethodNotSupported(HttpRequestMethodNotSupportedException exception) {
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+                .body(new ApiErrorResponse("METHOD_NOT_ALLOWED", exception.getMessage()));
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleNotFound(NoResourceFoundException exception) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ApiErrorResponse("NOT_FOUND", "The requested endpoint does not exist"));
     }
 
     @ExceptionHandler(IllegalStateException.class)

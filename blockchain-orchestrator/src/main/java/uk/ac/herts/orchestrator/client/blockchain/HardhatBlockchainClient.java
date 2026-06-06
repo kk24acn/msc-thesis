@@ -5,6 +5,7 @@ import java.math.BigInteger;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.locks.ReentrantLock;
 
 import org.springframework.stereotype.Component;
 import org.web3j.protocol.Web3j;
@@ -16,7 +17,7 @@ import org.web3j.protocol.core.methods.response.EthSendTransaction;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import uk.ac.herts.orchestrator.client.blockchain.config.HardhatProperties;
-import uk.ac.herts.orchestrator.exception.BlockchainRpcException;
+import uk.ac.herts.orchestrator.exception.blockchain.BlockchainRpcException;
 
 @Slf4j
 @Component
@@ -28,9 +29,11 @@ public class HardhatBlockchainClient implements BlockchainClient {
 
     private volatile BigInteger cachedGasPrice;
     private volatile long lastGasPriceFetchTime;
+    private final ReentrantLock gasPriceLock = new ReentrantLock();
 
     private volatile Long cachedBlockNumber;
     private volatile long lastBlockNumberFetchTime;
+    private final ReentrantLock blockNumberLock = new ReentrantLock();
 
     @Override
     public BigInteger fetchGasPrice() {
@@ -40,7 +43,8 @@ public class HardhatBlockchainClient implements BlockchainClient {
         if (cachedGasPrice != null && now - lastGasPriceFetchTime < cacheTtlMs) {
             return cachedGasPrice;
         }
-        synchronized (this) {
+        gasPriceLock.lock();
+        try {
             if (cachedGasPrice != null && now - lastGasPriceFetchTime < cacheTtlMs) {
                 return cachedGasPrice;
             }
@@ -51,8 +55,10 @@ public class HardhatBlockchainClient implements BlockchainClient {
                 lastGasPriceFetchTime = System.currentTimeMillis();
                 return gasPrice;
             } catch (IOException e) {
-                throw new RuntimeException("Gas price fetch failed", e);
+                throw new BlockchainRpcException("Gas price fetch failed", 0, e);
             }
+        } finally {
+            gasPriceLock.unlock();
         }
     }
 
@@ -64,7 +70,8 @@ public class HardhatBlockchainClient implements BlockchainClient {
         if (cachedBlockNumber != null && now - lastBlockNumberFetchTime < cacheTtlMs) {
             return cachedBlockNumber;
         }
-        synchronized (this) {
+        blockNumberLock.lock();
+        try {
             if (cachedBlockNumber != null && now - lastBlockNumberFetchTime < cacheTtlMs) {
                 return cachedBlockNumber;
             }
@@ -74,8 +81,10 @@ public class HardhatBlockchainClient implements BlockchainClient {
                 lastBlockNumberFetchTime = System.currentTimeMillis();
                 return blockNumber;
             } catch (IOException e) {
-                throw new RuntimeException("Block number fetch failed", e);
+                throw new BlockchainRpcException("Block number fetch failed", 0, e);
             }
+        } finally {
+            blockNumberLock.unlock();
         }
     }
 
@@ -91,7 +100,7 @@ public class HardhatBlockchainClient implements BlockchainClient {
                     .send().getTransactionCount();
             return count.longValue();
         } catch (IOException e) {
-            throw new RuntimeException(String.format("Failed to fetch nonce for %s", address), e);
+            throw new BlockchainRpcException(String.format("Failed to fetch nonce for %s", address), 0, e);
         }
     }
 
@@ -102,7 +111,7 @@ public class HardhatBlockchainClient implements BlockchainClient {
                     .send().getTransactionCount();
             return count.longValue();
         } catch (IOException e) {
-            throw new RuntimeException(String.format("Failed to fetch mined nonce for %s", address), e);
+            throw new BlockchainRpcException(String.format("Failed to fetch mined nonce for %s", address), 0, e);
         }
     }
 
@@ -161,7 +170,7 @@ public class HardhatBlockchainClient implements BlockchainClient {
                     .map(tx -> ((EthBlock.TransactionObject) tx).getHash())
                     .toList();
         } catch (IOException e) {
-            throw new RuntimeException(String.format("Failed to fetch block %s", blockNumber), e);
+            throw new BlockchainRpcException(String.format("Failed to fetch block %s", blockNumber), 0, e);
         }
     }
 

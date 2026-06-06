@@ -25,12 +25,27 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID> 
 
     @Modifying
     @Transactional
-    @Query(value = "UPDATE transactions SET status = 'CONFIRMED', mined_block = :blockNumber, confirmed_at = :confirmedAt WHERE hash IN (:hashes) AND status = 'IN_MEMPOOL'", nativeQuery = true)
+    @Query(value = """
+            UPDATE transactions 
+            SET status = CASE 
+                    WHEN sweeper_attempts >= 1 THEN 'CONFIRMED_SWEEPED' 
+                    ELSE 'CONFIRMED' 
+                END, 
+                mined_block = :blockNumber, 
+                confirmed_at = :confirmedAt 
+            WHERE hash IN (:hashes) 
+              AND status = 'IN_MEMPOOL'
+            """, nativeQuery = true)
     int confirmTransactions(
             @Param("hashes") List<String> hashes,
             @Param("blockNumber") Long blockNumber,
             @Param("confirmedAt") OffsetDateTime confirmedAt);
 
-    @Query(value = "SELECT DISTINCT ON (ethereum_address) * FROM transactions WHERE status = 'IN_MEMPOOL' ORDER BY ethereum_address, nonce ASC", nativeQuery = true)
+    @Query(value = """
+            SELECT DISTINCT ON (ethereum_address) * 
+            FROM transactions 
+            WHERE status = 'IN_MEMPOOL' 
+            ORDER BY ethereum_address, nonce ASC
+            """, nativeQuery = true)
     List<Transaction> findLowestNonceInMempoolPerAddress();
 }

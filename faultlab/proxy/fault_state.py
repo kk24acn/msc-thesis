@@ -30,6 +30,7 @@ class FaultConfig:
     metadata: dict[str, Any] = field(default_factory=dict)
     rounds: list[int] = field(default_factory=list)  # Round targeting: list of rounds to target (1=Init, 2-4=Advance) # fmt: skip
     inject_until_retry: int | None = None  # Inject fault until Nth retry; None = fault every signing attempt; (0=first attempt, 1=first retry, …) # fmt: skip
+    until_trace_id: int | None = None
 
 
 class FaultState:
@@ -60,6 +61,7 @@ class FaultState:
                 metadata=self._current_fault.metadata,
                 rounds=self._current_fault.rounds,
                 inject_until_retry=self._current_fault.inject_until_retry,
+                until_trace_id=self._current_fault.until_trace_id,
             )
 
     def cache_response(self, response: dsg_pb2.DsgPhaseResponse) -> None:
@@ -113,6 +115,14 @@ class FaultState:
         if fault.inject_until_retry is not None and retry_count > fault.inject_until_retry:
             return None, current_round
 
+        # Check if trace_id should be bypassed
+        if fault.until_trace_id is not None:
+            try:
+                if int(trace_id) > fault.until_trace_id:
+                    return None, current_round
+            except (ValueError, TypeError):
+                pass
+
         # Check if round should be bypassed
         if current_round not in fault.rounds:
             return None, current_round
@@ -125,6 +135,7 @@ class FaultState:
                 metadata=fault.metadata,
                 rounds=fault.rounds,
                 inject_until_retry=fault.inject_until_retry,
+                until_trace_id=fault.until_trace_id,
             ),
             current_round,
         )

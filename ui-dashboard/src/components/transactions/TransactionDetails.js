@@ -39,7 +39,13 @@ const TransactionDetails = ({ transaction }) => {
                                 return (
                                     <div
                                         key={`${transaction.id}-${stage.name}`}
-                                        className={`flex items-center justify-between p-3 rounded-xl ${safeStatus === 'running' ? 'bg-darcula-cyan/10 border border-darcula-cyan/30' : 'bg-darcula-card'}`}
+                                        className={`flex items-center justify-between p-3 rounded-xl ${
+                                            safeStatus === 'running' 
+                                                ? 'bg-darcula-cyan/10 border border-darcula-cyan/30' 
+                                                : safeStatus === 'warning' 
+                                                    ? 'bg-darcula-warning/10 border border-darcula-warning/30' 
+                                                    : 'bg-darcula-card'
+                                        }`}
                                     >
                                         <div className="flex items-center gap-3">
                                             <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${stageBadgeClasses[safeStatus]}`}>

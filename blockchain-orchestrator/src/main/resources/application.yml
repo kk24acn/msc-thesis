@@ -40,8 +40,13 @@ spring:
     signer-addresses: ${SIGNER_RPC_URLS:127.0.0.1:50051,127.0.0.1:50052,127.0.0.1:50053}
     dsg:
       max-retries: ${DSG_MAX_RETRIES:3}
+      max-rounds: ${DSG_MAX_ROUNDS:5}
       request-timeout: ${DSG_REQUEST_TIMEOUT:10s}
       eth-derivation-path: ${DSG_ETH_DERIVATION_PATH:m/0}
+    quarantine:
+      enabled: ${QUARANTINE_ENABLED:true}
+      eviction-interval-ms: ${QUARANTINE_EVICTION_INTERVAL_MS:1000}
+      ttl: ${QUARANTINE_TTL:10s}
     nonce-gap-sweeper:
       enabled: ${NONCE_GAP_SWEEPER_ENABLED:true}
       interval-ms: ${NONCE_GAP_SWEEPER_INTERVAL_MS:5000}

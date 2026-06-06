@@ -6,7 +6,7 @@ import org.web3j.crypto.Sign;
 import org.web3j.crypto.Sign.SignatureData;
 import org.web3j.utils.Numeric;
 
-import uk.ac.herts.orchestrator.exception.SignatureAggregationException;
+import uk.ac.herts.orchestrator.exception.mpc.SignatureAggregationException;
 import uk.ac.herts.orchestrator.grpc.signer.Dsg.DsgPhaseResponse;
 import uk.ac.herts.orchestrator.grpc.signer.Dsg.SignatureShare;
 

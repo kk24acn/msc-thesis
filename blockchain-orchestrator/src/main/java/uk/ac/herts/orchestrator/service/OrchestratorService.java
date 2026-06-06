@@ -18,8 +18,9 @@ import uk.ac.herts.orchestrator.api.filter.TraceIdFilter;
 import uk.ac.herts.orchestrator.client.blockchain.BlockchainClient;
 import uk.ac.herts.orchestrator.client.blockchain.NonceManager;
 import uk.ac.herts.orchestrator.client.mpc.TransactionSigner;
-import uk.ac.herts.orchestrator.exception.SignatureGenerationException;
-import uk.ac.herts.orchestrator.exception.TransactionSigningException;
+import uk.ac.herts.orchestrator.exception.mpc.SignatureGenerationException;
+import uk.ac.herts.orchestrator.exception.mpc.SignatureVerificationException;
+import uk.ac.herts.orchestrator.exception.transaction.TransactionSigningException;
 import uk.ac.herts.orchestrator.repository.MpcKeyRepository;
 import uk.ac.herts.orchestrator.repository.dao.TransactionDao;
 import uk.ac.herts.orchestrator.repository.entity.MpcKey;
@@ -55,7 +56,7 @@ public class OrchestratorService {
                 sign(tx, mpcKey);
             } catch (TransactionSigningException e) {
                 Throwable cause = e.getCause();
-                if (cause instanceof SignatureGenerationException sge && sge.isVerificationFailure()) {
+                if (cause instanceof SignatureVerificationException) {
                     transactionDao.markVerificationAborted(tx, ErrorUtils.buildErrorMessage("Signing phase failed", e));
                 } else {
                     transactionDao.markAborted(tx, ErrorUtils.buildErrorMessage("Signing phase failed", e));

@@ -12,14 +12,12 @@ const statusLabels = {
     in_mempool: 'In Mempool',
     stalled: 'Stalled',
     sweeped: 'Sweeped',
+    warning: 'Warning',
     pending: 'Pending',
 };
 
-export const StatusBadge = ({ status, isSweeped }) => {
-    // Sweeped transactions don't carry a dedicated DB status — they are
-    // identified by amount_ether === 0.  Override the badge to show 'sweeped'.
-    const effectiveStatus = isSweeped ? 'sweeped' : status;
-    const safeStatus = getSafeStatus(effectiveStatus);
+export const StatusBadge = ({ status }) => {
+    const safeStatus = getSafeStatus(status);
 
     return (
         <span className={`status-badge ${safeStatus}`}>
@@ -84,7 +82,7 @@ const TransactionsRow = ({
                     </div>
                 </div>
                 <div className="col-span-2">
-                    <StatusBadge status={transaction.status} isSweeped={transaction.isSweeped} />
+                    <StatusBadge status={transaction.status} />
                 </div>
                 <div className="col-span-1">
                     <span className="value-mono">{transaction.duration}</span>

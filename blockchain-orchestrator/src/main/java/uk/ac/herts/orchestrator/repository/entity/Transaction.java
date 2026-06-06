@@ -28,7 +28,7 @@ public class Transaction {
     @Column(name = "to_address", length = 50)
     private String toAddress;
 
-    @Column(name = "amount_ether")
+    @Column(name = "amount_ether", precision = 38, scale = 18)
     private BigDecimal amountEther;
 
     @Column(name = "status")
@@ -46,6 +46,9 @@ public class Transaction {
 
     @Column(name = "submission_retries")
     private Integer submissionRetries;
+
+    @Column(name = "sweeper_signing_retries")
+    private Integer sweeperSigningRetries;
 
     @Column(name = "sweeper_attempts")
     private Integer sweeperAttempts;

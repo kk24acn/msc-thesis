@@ -2,6 +2,7 @@ import pytest
 
 from faultlab.client.orchestrator import OrchestratorClient
 
+RESULTS_SUBDIR = "FAULT_INJECTION"
 NUM_TRANSACTIONS = 10
 
 # == CRASH_RES =====================================================================
@@ -30,6 +31,22 @@ async def test_crash_res_100pct_failure_rate(
     mpc_accounts: list[tuple[str, str]],
 ) -> None:
     """All transactions fail. Response never reaches the orchestrator (gRPC UNAVAILABLE abort)"""
+
+    successful = await orchestrator_client.submit_transactions_batch(
+        accounts=mpc_accounts,
+        count=NUM_TRANSACTIONS,
+        amount_range=(0.00001, 100),
+    )
+    assert successful >= NUM_TRANSACTIONS * 1.0, f"Too many submissions failed: {successful}/{NUM_TRANSACTIONS}"
+
+
+@pytest.mark.blockchain_refresh(num_accounts=10, funding_amount_eth="10000.0")
+@pytest.mark.inject_fault(fault_type="CRASH_RES", failure_rate=100, until_trace_id=4)
+async def test_crash_res_100pct_failure_rate_until_trace_id_4(
+    orchestrator_client: OrchestratorClient,
+    mpc_accounts: list[tuple[str, str]],
+) -> None:
+    """50% transactions fail. First 5 fail (trace_ids 0-4), last 5 succeed"""
 
     successful = await orchestrator_client.submit_transactions_batch(
         accounts=mpc_accounts,
@@ -298,6 +315,25 @@ async def test_mutate_100pct_failure_rate_1_target(
 
 
 @pytest.mark.blockchain_refresh(num_accounts=10, funding_amount_eth="10000.0")
+@pytest.mark.inject_fault(fault_type="MUTATE", failure_rate=100, signers=[2], until_trace_id=10)
+async def test_mutate_100pct_failure_rate_1_target_until_trace_id_10(
+    orchestrator_client: OrchestratorClient,
+    mpc_accounts: list[tuple[str, str]],
+) -> None:
+    """
+    All transactions were succeed. Faults introduced to signer #2 only while trace_id=10; the remaining transactions processed successfully.
+    Signer #2 is quarantined at the beginning of the batch execution and released 10 seconds after.
+    """
+
+    successful = await orchestrator_client.submit_transactions_batch(
+        accounts=mpc_accounts,
+        count=NUM_TRANSACTIONS * 100,
+        amount_range=(0.00001, 100),
+    )
+    assert successful >= NUM_TRANSACTIONS * 1.0, f"Too many submissions failed: {successful}/{NUM_TRANSACTIONS}"
+
+
+@pytest.mark.blockchain_refresh(num_accounts=10, funding_amount_eth="10000.0")
 @pytest.mark.inject_fault(fault_type="MUTATE", failure_rate=100, rounds=[1])
 async def test_mutate_100pct_failure_rate_round_1_only(
     orchestrator_client: OrchestratorClient,
@@ -367,4 +403,3 @@ async def test_crash_res_10pct_nodes_2_and_3(
         amount_range=(0.00001, 100),
     )
     assert successful >= NUM_TRANSACTIONS * 10 * 1.0, f"Too many submissions failed: {successful}/{NUM_TRANSACTIONS}"
-

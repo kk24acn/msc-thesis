@@ -29,7 +29,6 @@ async def _invoke(
 
 async def _handle_pre_request_faults(
     fault: FaultConfig | None,
-    context: ServicerContext,
     log_ctx: str,
 ) -> None:
     if fault is None:
@@ -42,60 +41,42 @@ async def _handle_pre_request_faults(
             await asyncio.sleep(delay_ms / 1000)
 
 
-async def _handle_request_faults(
-    request: dsg_pb2.DsgPhaseRequest,
-    fault: FaultConfig | None,
-    stub_function: Callable,
+def _mutate_response(
+    response: dsg_pb2.DsgPhaseResponse,
+    fault: FaultConfig,
     log_ctx: str,
 ) -> dsg_pb2.DsgPhaseResponse:
-    if fault is None:
-        return await stub_function(request)
 
-    match fault.fault_type:
-        case FaultType.MUTATE:
-            # byte_offset is measured from the END of the target bytes so the flip
-            # lands in fixed-size cryptographic fields rather than length prefixes.
-            offset = fault.metadata.get("byte_offset", 10)
-            mask = fault.metadata.get("xor_mask", 0xFF)
+    def _flip_bytes(data: bytes, offset: int, mask: int) -> bytes:
+        raw = bytearray(data)
+        idx = len(raw) - 1 - offset
+        if idx >= 0:
+            raw[idx] ^= mask  # XOR
+        return bytes(raw)
 
-            def flip(data: bytes) -> bytes:
-                raw = bytearray(data)
-                idx = len(raw) - 1 - offset
-                if idx >= 0:
-                    raw[idx] ^= mask
-                return bytes(raw)
+    # byte_offset is measured from the END of the target bytes so the flip
+    # lands in fixed-size cryptographic fields rather than length prefixes.
+    offset = fault.metadata.get("byte_offset", 10)
+    mask = fault.metadata.get("xor_mask", 0xFF)
 
-            match request.WhichOneof("payload"):
-                case "init":
-                    # Corrupt the message hash — signers sign a different message with
-                    # no cryptographic abort; the combined signature is invalid on-chain.
-                    logger.info(f"[MUTATE] ExecuteDsgPhase | target=message_hash, {log_ctx}")
-                    return await stub_function(
-                        dsg_pb2.DsgPhaseRequest(
-                            dsg_session_id=request.dsg_session_id,
-                            party_id=request.party_id,
-                            init=dsg_pb2.InitPayload(
-                                key_id=request.init.key_id,
-                                message_hash=flip(request.init.message_hash),
-                                derivation_path=request.init.derivation_path,
-                            ),
-                        )
-                    )
-                case "peer_payloads":
-                    # Corrupt round messages — triggers cryptographic abort on the signer.
-                    mutated = [flip(p) for p in request.peer_payloads.payloads]
-                    logger.info(f"[MUTATE] ExecuteDsgPhase | target=peer_payloads, payloads={len(mutated)}, {log_ctx}")
-                    return await stub_function(
-                        dsg_pb2.DsgPhaseRequest(
-                            dsg_session_id=request.dsg_session_id,
-                            party_id=request.party_id,
-                            peer_payloads=dsg_pb2.PeerPayloads(payloads=mutated),
-                        )
-                    )
-                case _:
-                    return await stub_function(request)
+    match response.WhichOneof("result"):
+        case "intermediate_output":
+            mutated = _flip_bytes(response.intermediate_output, offset, mask)
+            logger.info(f"[MUTATE] ExecuteDsgPhase | target=intermediate_output, {log_ctx}")
+            return dsg_pb2.DsgPhaseResponse(intermediate_output=mutated)
+        case "signature_share":
+            share = response.signature_share
+            logger.info(f"[MUTATE] ExecuteDsgPhase | target=signature_share, {log_ctx}")
+            return dsg_pb2.DsgPhaseResponse(
+                signature_share=dsg_pb2.SignatureShare(
+                    s_0=_flip_bytes(share.s_0, offset, mask),
+                    s_1=_flip_bytes(share.s_1, offset, mask),
+                    r=share.r,
+                ),
+            )
         case _:
-            return await stub_function(request)
+            logger.warning(f"[MUTATE] ExecuteDsgPhase | no result to mutate, {log_ctx}")
+            return response
 
 
 async def _handle_post_request_faults(
@@ -201,11 +182,11 @@ class DsgServiceProxy(dsg_pb2_grpc.DsgServiceServicer):
         if fault and fault.fault_type == FaultType.REPLAY:
             return await self._handle_replay_fault(request, context, round_num, log_ctx)
 
-        await _handle_pre_request_faults(fault, context, log_ctx)
-        response = await _invoke(
-            _handle_request_faults(request, fault, self._stub.ExecuteDsgPhase, log_ctx),
-            context,
-            log_ctx,
-        )
+        await _handle_pre_request_faults(fault, log_ctx)
+        response = await _invoke(self._stub.ExecuteDsgPhase(request), context, log_ctx)
+
+        if fault and fault.fault_type == FaultType.MUTATE:
+            response = _mutate_response(response, fault, log_ctx)
+
         await _handle_post_request_faults(fault, context, log_ctx)
         return response

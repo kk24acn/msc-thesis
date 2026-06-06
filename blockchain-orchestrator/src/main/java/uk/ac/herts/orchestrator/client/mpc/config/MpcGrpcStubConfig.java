@@ -29,7 +29,8 @@ public class MpcGrpcStubConfig {
                                         .forTarget(node.getAddress())
                                         .usePlaintext()
                                         .build();
-                                DsgServiceFutureStub stub = DsgServiceGrpc.newFutureStub(channel);
+                                DsgServiceFutureStub stub = DsgServiceGrpc
+                                        .newFutureStub(channel);
                                 log.info("DSG Service stub created for Signer#{} ({})",
                                         node.getId(), node.getAddress());
                                 return stub;

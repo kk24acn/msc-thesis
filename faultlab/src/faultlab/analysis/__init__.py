@@ -12,13 +12,14 @@ ALL_STATUSES: list[str] = [
     "SUBMITTING",
     "IN_MEMPOOL",
     "CONFIRMED",
+    "CONFIRMED_SWEEPED",
     "STALLED",
     "FAILED",
     "CRYPTOGRAPHIC_ABORT",
 ]
-SUCCESS_STATUSES: frozenset[str] = frozenset(["CONFIRMED"])
+SUCCESS_STATUSES: frozenset[str] = frozenset(["CONFIRMED", "CONFIRMED_SWEEPED"])
 FAILURE_STATUSES: frozenset[str] = frozenset(["FAILED", "CRYPTOGRAPHIC_ABORT", "VERIFICATION_ABORT"])
-TERMINAL_STATUSES: frozenset[str] = frozenset({"CONFIRMED", "STALLED", "FAILED", "CRYPTOGRAPHIC_ABORT", "VERIFICATION_ABORT"}) # fmt: skip
+TERMINAL_STATUSES: frozenset[str] = frozenset({"CONFIRMED", "CONFIRMED_SWEEPED", "STALLED", "FAILED", "CRYPTOGRAPHIC_ABORT", "VERIFICATION_ABORT"}) # fmt: skip
 NON_TERMINAL_STATUSES: frozenset[str] = frozenset({"NEW", "SIGNING", "SIGNED", "SUBMITTING", "IN_MEMPOOL"})
 
 DATETIME_COLS: list[str] = [
@@ -55,6 +56,7 @@ STATUS_COLORS: dict[str, str] = {
     "SUBMITTING": "#ffb300",
     "IN_MEMPOOL": "#ff7043",
     "CONFIRMED": "#388e3c",
+    "CONFIRMED_SWEEPED": "#fff700",
     "STALLED": "#2c6e8f",
     "FAILED": "#d32f2f",
     "CRYPTOGRAPHIC_ABORT": "#880e4f",
@@ -114,7 +116,7 @@ def describe_latency_percentiles(df: pd.DataFrame, status: frozenset[str] = SUCC
 def execution_summary(df):
     df = enrich_latency_metrics(df.copy())
 
-    df_confirmed = df[df["status"] == "CONFIRMED"]
+    df_confirmed = df[df["status"].isin(["CONFIRMED", "CONFIRMED_SWEEPED"])]
 
     input_duration = (df["created_at"].max() - df["created_at"].min()).total_seconds()
     total_duration = (df["updated_at"].max() - df["created_at"].min()).total_seconds()
@@ -180,7 +182,7 @@ def merge_run_results(parent_dir: Path | str) -> dict[str, list[pd.DataFrame]]:
 
 
 def summarise_run(df: pd.DataFrame) -> dict:
-    confirmed_df = df[df["status"] == "CONFIRMED"]
+    confirmed_df = df[df["status"].isin(["CONFIRMED", "CONFIRMED_SWEEPED"])]
 
     total_span = (df["updated_at"].max() - df["created_at"].min()).total_seconds()
     overall_tps = len(confirmed_df) / total_span if total_span > 0 else float("nan")
@@ -203,26 +205,7 @@ def summarise_run(df: pd.DataFrame) -> dict:
     }
 
 
-def aggregate_summaries(
-    summaries: list[dict]
-) -> dict:
-    """Aggregate summary dicts from multiple runs into descriptive statistics.
-
-    Parameters
-    ----------
-    summaries : list[dict]
-        Dicts returned by :func:`summarise_run`, one per run for the *same*
-        test configuration.
-
-    Returns
-    -------
-    dict
-        Flat dict containing ``n_runs`` plus, for every numeric metric,
-        keys ``<metric>_mean``, ``<metric>_std``, ``<metric>_min``,
-        and ``<metric>_max``.
-        The fields ``total_txs``, ``confirmed_txs`` are summed, and 
-        ``success_rate`` is averaged without creating descriptive statistics.
-    """
+def aggregate_summaries(summaries: list[dict]) -> dict:
     if not summaries:
         return {}
 
@@ -233,11 +216,11 @@ def aggregate_summaries(
         series = pd.to_numeric(metrics_df[col], errors="coerce").dropna()
         if series.empty:
             continue
-            
+
         if col in ("total_txs", "confirmed_txs"):
             result[col] = int(series.sum())
             continue
-            
+
         if col == "success_rate":
             result[col] = round(series.mean(), 1)
             continue

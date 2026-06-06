@@ -20,17 +20,20 @@ const formatTimestamp = (date) => {
 
 const transformDbRecord = (dbTx) => {
     const statusUpper = dbTx.status?.toUpperCase() || '';
-    const isConfirmed = statusUpper === 'CONFIRMED' || statusUpper === 'SUCCESS';
-    const isFailed = statusUpper === 'FAILED' || statusUpper === 'ERROR';
+    const isConfirmedSweeped = statusUpper === 'CONFIRMED_SWEEPED';
+    const isConfirmed = statusUpper === 'CONFIRMED' || isConfirmedSweeped;
+    const isFailed = statusUpper === 'FAILED';
     const isCryptoAbort = statusUpper === 'CRYPTOGRAPHIC_ABORT';
     const isVerificationAbort = statusUpper === 'VERIFICATION_ABORT';
     const isInMempool = statusUpper === 'IN_MEMPOOL';
     const isStalled = statusUpper === 'STALLED';
-    const isSweeped = parseFloat(dbTx.amount_ether) === 0;
+    const isSweeped = parseFloat(dbTx.amount_ether) === 0 || isConfirmedSweeped;
     const sweeperAttempts = dbTx.sweeper_attempts ?? 0;
+    const sweeperSigningRetries = dbTx.sweeper_signing_retries ?? 0;
 
     let uiStatus = 'running';
-    if (isConfirmed) uiStatus = 'completed';
+    if (isSweeped) uiStatus = 'sweeped';
+    else if (isConfirmed) uiStatus = 'completed';
     else if (isCryptoAbort) uiStatus = 'crypto_abort';
     else if (isVerificationAbort) uiStatus = 'verification_abort';
     else if (isFailed) uiStatus = 'failed';
@@ -99,6 +102,17 @@ const transformDbRecord = (dbTx) => {
         }
     }
 
+    if (isSweeped && sweeperAttempts > 0) {
+        const sweepRetryInfo = sweeperSigningRetries > 0
+            ? ` (${sweeperSigningRetries} signing retries)`
+            : '';
+        logs.push({
+            timestamp: formatTimestamp(updatedAt || startTime),
+            level: 'warning',
+            message: `Transaction processed by nonce gap sweeper — zero-value fill submitted after ${sweeperAttempts} sweep attempt(s)${sweepRetryInfo} to resolve nonce gap`,
+        });
+    }
+
     if (submittedAt) {
         logs.push({ timestamp: formatTimestamp(submittedAt), level: 'info', message: 'Transaction submitted to mempool' });
     }
@@ -106,14 +120,6 @@ const transformDbRecord = (dbTx) => {
 
     if (isStalled) {
         logs.push({ timestamp: formatTimestamp(new Date(dbTx.updated_at)), level: 'warning', message: 'Transaction stalled — queued in mempool awaiting transactions with smaller nonce' });
-    }
-
-    if (isSweeped && sweeperAttempts > 0) {
-        logs.push({
-            timestamp: formatTimestamp(updatedAt || startTime),
-            level: 'warning',
-            message: `Transaction processed by nonce gap sweeper — zero-value fill submitted after ${sweeperAttempts} sweep attempt(s) to resolve nonce gap`,
-        });
     }
 
     if (confirmedAt) {
@@ -139,27 +145,35 @@ const transformDbRecord = (dbTx) => {
             { name: 'New', status: 'completed', timing: '0ms' },
             {
                 name: 'Queued',
-                status: signingStartedAt
+                status: isSweeped
                     ? 'completed'
-                    : (isFailed || isCryptoAbort || isVerificationAbort) ? 'failed' : 'running',
+                    : signingStartedAt
+                        ? 'completed'
+                        : (isFailed || isCryptoAbort || isVerificationAbort) ? 'failed' : 'running',
                 timing: waitTiming,
             },
             {
                 name: 'Signed',
-                status: dbTx.signed_hex_payload
-                    ? 'completed'
-                    : (isCryptoAbort || isVerificationAbort || isFailed) ? 'failed'
-                        : signingStartedAt ? 'running' : 'pending',
+                status: isSweeped
+                    ? (isConfirmed ? 'warning' : 'pending')
+                    : dbTx.signed_hex_payload
+                        ? 'completed'
+                        : (isCryptoAbort || isVerificationAbort || isFailed) ? 'failed'
+                            : signingStartedAt ? 'running' : 'pending',
                 timing: signedTiming,
             },
             {
                 name: 'In Mempool',
-                status: isConfirmed ? 'completed' : (isFailed || isCryptoAbort || isVerificationAbort) ? 'failed' : isStalled ? 'stalled' : (isInMempool || dbTx.transaction_hash) ? 'in_mempool' : 'pending',
+                status: isSweeped
+                    ? (isConfirmed ? 'warning' : 'pending')
+                    : isConfirmed ? 'completed' : (isFailed || isCryptoAbort || isVerificationAbort) ? 'failed' : isStalled ? 'stalled' : (isInMempool || dbTx.transaction_hash) ? 'in_mempool' : 'pending',
                 timing: submittedTiming,
             },
             {
                 name: 'Confirmed',
-                status: isConfirmed ? 'completed' : ((isFailed || isCryptoAbort || isVerificationAbort) ? 'failed' : 'pending'),
+                status: isSweeped
+                    ? (isConfirmed ? 'warning' : 'pending')
+                    : isConfirmed ? 'completed' : ((isFailed || isCryptoAbort || isVerificationAbort) ? 'failed' : 'pending'),
                 timing: confirmedTiming,
             },
         ],
@@ -170,6 +184,7 @@ const transformDbRecord = (dbTx) => {
         signingRetries: dbTx.signing_retries ?? 0,
         submissionRetries: dbTx.submission_retries ?? 0,
         sweeperAttempts,
+        sweeperSigningRetries,
         isSweeped,
         pureExecMs: confirmedAt && signingStartedAt ? confirmedAt.getTime() - signingStartedAt.getTime() : null,
         logs,

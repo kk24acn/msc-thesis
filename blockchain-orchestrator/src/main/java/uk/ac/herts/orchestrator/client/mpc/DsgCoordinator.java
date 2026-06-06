@@ -3,8 +3,8 @@ package uk.ac.herts.orchestrator.client.mpc;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Semaphore;
@@ -23,8 +23,10 @@ import lombok.extern.slf4j.Slf4j;
 import uk.ac.herts.orchestrator.api.filter.TraceIdFilter;
 import uk.ac.herts.orchestrator.client.mpc.config.MpcProperties;
 import uk.ac.herts.orchestrator.client.mpc.grpc.TraceIdClientInterceptor;
-import uk.ac.herts.orchestrator.exception.SignatureGenerationException;
-import uk.ac.herts.orchestrator.exception.SignatureAggregationException;
+import uk.ac.herts.orchestrator.exception.mpc.DsgRoundException;
+import uk.ac.herts.orchestrator.exception.mpc.SignatureAggregationException;
+import uk.ac.herts.orchestrator.exception.mpc.SignatureGenerationException;
+import uk.ac.herts.orchestrator.exception.mpc.SignatureVerificationException;
 import uk.ac.herts.orchestrator.grpc.signer.Dsg.DsgPhaseRequest;
 import uk.ac.herts.orchestrator.grpc.signer.Dsg.DsgPhaseResponse;
 import uk.ac.herts.orchestrator.grpc.signer.Dsg.InitPayload;
@@ -41,19 +43,22 @@ public class DsgCoordinator {
     private final MpcProperties mpcProperties;
     private final Semaphore grpcConcurrencyLimit;
     private final SignatureAggregator signatureAggregator;
-    private final AtomicInteger roundRobinCounter = new AtomicInteger(0);
-    private final Map<Integer, List<List<Integer>>> quorumCombinationsCache = new ConcurrentHashMap<>();
+    private final QuorumManager quorumManager;
+    private final AtomicInteger globalRoundRobinCounter = new AtomicInteger(0);
 
     public DsgCoordinator(
             Map<Integer, DsgServiceFutureStub> stubs,
             MpcProperties mpcProperties,
-            SignatureAggregator signatureAggregator) {
-        int grpcConcurrencyLimit = mpcProperties.getGrpcConcurrencyLimit();
+            SignatureAggregator signatureAggregator,
+            QuorumManager quorumManager) {
+        int concurrencyLimit = mpcProperties.getGrpcConcurrencyLimit();
         this.stubs = stubs;
         this.mpcProperties = mpcProperties;
         this.signatureAggregator = signatureAggregator;
-        this.grpcConcurrencyLimit = new Semaphore(grpcConcurrencyLimit, true);
-        log.info("{} initiated with GRPC_CONCURRENCY_LIMIT={}", this.getClass().getName(), grpcConcurrencyLimit);
+        this.quorumManager = quorumManager;
+        this.grpcConcurrencyLimit = new Semaphore(concurrencyLimit, true);
+        this.quorumManager.initialize(stubs.keySet());
+        log.info("{} initiated with GRPC_CONCURRENCY_LIMIT={}", this.getClass().getName(), concurrencyLimit);
     }
 
     public record DsgResult(SignatureData signature, int retries) {
@@ -64,7 +69,7 @@ public class DsgCoordinator {
             grpcConcurrencyLimit.acquire();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new RuntimeException("Interrupted while waiting for DSG semaphore", e);
+            throw new IllegalStateException("Interrupted while waiting for DSG semaphore", e);
         }
 
         try {
@@ -72,9 +77,64 @@ public class DsgCoordinator {
         } catch (RuntimeException e) {
             throw e;
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            throw new IllegalStateException("Unexpected checked exception during DSG execution", e);
         } finally {
             grpcConcurrencyLimit.release();
+        }
+    }
+
+    public DsgResult executeDsg(MpcKey mpcKey, byte[] messageHash) {
+        log.info("Starting DSG execution for keyId={} with {} Signer Stubs", mpcKey.getKeyId(), stubs.size());
+
+        int maxAttempts = mpcProperties.getDsg().getMaxRetries() + 1;
+        int quarantineBudget = stubs.size() - mpcKey.getThreshold();
+        Exception lastException = null;
+        int actualAttempt = 0;
+        int localRoundRobin = Math.abs(globalRoundRobinCounter.getAndIncrement());
+
+        for (int i = 0; i < maxAttempts; i++) {
+            actualAttempt++;
+            List<List<Integer>> quorums = quorumManager.getAvailableQuorums(mpcKey.getThreshold());
+            List<Integer> quorum = quorums.get(localRoundRobin % quorums.size());
+            localRoundRobin++;
+            String dsgSessionId = UUID.randomUUID().toString();
+
+            try {
+                log.info("DSG attempt {} (effective {}/{}, session={}, quorum={})",
+                        actualAttempt, i + 1, maxAttempts, dsgSessionId, quorum);
+
+                List<ByteString> initialPayloads = initializeQuorum(
+                        mpcKey.getKeyId(), dsgSessionId, messageHash, quorum, i);
+                SignatureData sigData = processRounds(
+                        dsgSessionId, quorum, messageHash, mpcKey.getEthereumAddress(), i, initialPayloads);
+
+                log.info("DSG succeeded with session {}", dsgSessionId);
+                return new DsgResult(sigData, i);
+            } catch (SignatureAggregationException e) {
+                lastException = e;
+                log.warn("Aggregation failure in quorum {}: {}. Retrying.", quorum, e.getMessage());
+            } catch (Exception e) {
+                lastException = e;
+                boolean banProcessed = quorumManager.processBanRequest(e, mpcKey.getThreshold());
+                if (banProcessed) {
+                    if (quarantineBudget > 0) {
+                        quarantineBudget--;
+                        i--;
+                    }
+                    log.warn("Quarantined node during quorum {}.", quorum);
+                } else {
+                    log.warn("Execution failure in quorum {}. Exception: {}", quorum, e.getMessage(), e);
+                }
+            }
+        }
+
+        if (lastException instanceof SignatureAggregationException) {
+            throw new SignatureVerificationException(
+                    "Quorum permutations failed. Last failure was an aggregation error",
+                    maxAttempts - 1, lastException, quorumManager.getQuarantinedPartyIds());
+        } else {
+            throw new SignatureGenerationException("All quorum permutations failed",
+                    maxAttempts - 1, lastException, quorumManager.getQuarantinedPartyIds());
         }
     }
 
@@ -86,66 +146,8 @@ public class DsgCoordinator {
         return stub;
     }
 
-    public DsgResult executeDsg(MpcKey mpcKey, byte[] messageHash) {
-        log.info("Starting DSG execution for keyId={} with {} Signer Stubs", mpcKey.getKeyId(), stubs.size());
-        List<Integer> availableNodes = new ArrayList<>(stubs.keySet());
-        List<List<Integer>> candidateQuorums = quorumCombinationsCache.computeIfAbsent(
-                mpcKey.getThreshold(), t -> generateQuorumCombinations(availableNodes, t));
-
-        int totalPermutations = candidateQuorums.size();
-        int maxAttempts = mpcProperties.getDsg().getMaxRetries() + 1;
-        int offset = Math.abs(roundRobinCounter.getAndIncrement() % totalPermutations);
-        String expectedAddress = mpcKey.getEthereumAddress();
-
-        boolean onlyAggregationFailures = true;
-        for (int i = 0; i < maxAttempts; i++) {
-            List<Integer> quorum = candidateQuorums.get((i + offset) % totalPermutations);
-            String dsgSessionId = UUID.randomUUID().toString();
-
-            try {
-                log.info("DSG permutation attempt {}/{} (session={})", i + 1, maxAttempts, dsgSessionId);
-
-                List<ByteString> initialPayloads = initializeQuorum(mpcKey.getKeyId(), dsgSessionId, messageHash,
-                        quorum, i);
-                SignatureData sigData = processRounds(dsgSessionId, quorum, messageHash, expectedAddress, i,
-                        initialPayloads);
-
-                log.info("DSG succeeded with session {}", dsgSessionId);
-                return new DsgResult(sigData, i);
-            } catch (SignatureAggregationException e) {
-                log.warn("Signature aggregation failure occurred in quorum {}: {}. Retrying with next permutation",
-                        quorum, e.getMessage());
-            } catch (Exception e) {
-                onlyAggregationFailures = false;
-                log.warn("Execution failure in quorum {}. Retrying...", quorum);
-            }
-        }
-        throw new SignatureGenerationException("All quorum permutations failed", maxAttempts - 1, null,
-                onlyAggregationFailures);
-    }
-
-    private List<List<Integer>> generateQuorumCombinations(List<Integer> nodes, int threshold) {
-        List<List<Integer>> combinations = new ArrayList<>();
-        generateQuorumCombinationsHelper(nodes, threshold, 0, new ArrayList<>(), combinations);
-        return combinations;
-    }
-
-    private void generateQuorumCombinationsHelper(List<Integer> nodes, int threshold, int start, List<Integer> current,
-            List<List<Integer>> combinations) {
-        if (current.size() == threshold) {
-            combinations.add(new ArrayList<>(current));
-            return;
-        }
-        for (int i = start; i < nodes.size(); i++) {
-            current.add(nodes.get(i));
-            generateQuorumCombinationsHelper(nodes, threshold, i + 1, current, combinations);
-            current.remove(current.size() - 1);
-        }
-    }
-
     private List<ByteString> initializeQuorum(String keyId, String dsgSessionId, byte[] messageHash,
-            List<Integer> quorum,
-            int retry) {
+            List<Integer> quorum, int retry) {
         log.info("Initializing specific quorum: {}", quorum);
         List<CompletableFuture<ByteString>> futures = new ArrayList<>();
 
@@ -169,8 +171,7 @@ public class DsgCoordinator {
                         return response.getIntermediateOutput();
                     })
                     .exceptionally(e -> {
-                        throw new RuntimeException(String.format("Signer#%d failed ExecuteDsgPhase (Init)", partyId),
-                                e);
+                        throw DsgRoundException.buildException(partyId, 0, "Init", e);
                     });
 
             futures.add(future);
@@ -182,7 +183,8 @@ public class DsgCoordinator {
             log.info("Quorum {} initialized successfully with {} Phase 1 payloads", quorum, initialPayloads.size());
             return initialPayloads;
         } catch (Exception e) {
-            throw new RuntimeException(String.format("Failed to initialize quorum %s", quorum), e);
+            throw new DsgRoundException(String.format("Failed to initialize quorum %s", quorum), e, -1, 0, "UNKNOWN",
+                    "Init phase failed");
         }
     }
 
@@ -190,14 +192,13 @@ public class DsgCoordinator {
             String expectedAddress, int retry, List<ByteString> currentPayloads) {
         log.info("Starting DSG rounds for session: {}", dsgSessionId);
 
-        int round = 0;
-
-        while (true) {
-            log.info("--- DSG Round {}; Quorum {} ---", round++, quorum);
+        int maxRounds = mpcProperties.getDsg().getMaxRounds();
+        for (int round = 0; round < maxRounds; round++) {
+            log.info("--- DSG Round {}; Quorum {} ---", round, quorum);
 
             try {
                 List<CompletableFuture<DsgPhaseResponse>> roundFutures = createRoundFutures(
-                        dsgSessionId, quorum, currentPayloads, retry);
+                        dsgSessionId, quorum, currentPayloads, retry, round);
 
                 List<DsgPhaseResponse> responses = roundFutures.stream()
                         .map(CompletableFuture::join)
@@ -209,21 +210,25 @@ public class DsgCoordinator {
 
                 if (responses.get(0).hasSignatureShare()) {
                     SignatureData sigData = signatureAggregator.aggregate(responses, messageHash, expectedAddress);
-                    log.info("DSG signature obtained after {} rounds", round);
+                    log.info("DSG signature obtained after {} rounds", round + 1);
                     return sigData;
                 }
 
-                log.info("DSG round {} completed", round);
+                log.info("DSG round {} completed", round + 1);
             } catch (SignatureAggregationException e) {
                 throw e;
             } catch (Exception e) {
-                throw new RuntimeException(String.format("DSG round %d failed", round), e);
+                throw new DsgRoundException(String.format("DSG round %d failed", round), e, -1, round, "UNKNOWN",
+                        "Round execution failed");
             }
         }
+
+        throw new SignatureGenerationException(
+                String.format("DSG protocol did not complete within %d rounds", maxRounds), maxRounds, null, Set.of());
     }
 
     private List<CompletableFuture<DsgPhaseResponse>> createRoundFutures(String dsgSessionId, List<Integer> quorum,
-            List<ByteString> payloads, int retry) {
+            List<ByteString> payloads, int retry, int round) {
         log.debug("Creating ExecuteDsgPhase (Advance) futures for {} signers with {} payloads", quorum.size(),
                 payloads.size());
         return quorum.stream()
@@ -243,8 +248,7 @@ public class DsgCoordinator {
                                 return response;
                             })
                             .exceptionally(e -> {
-                                throw new RuntimeException(
-                                        String.format("Signer#%d failed ExecuteDsgPhase (Advance)", partyId), e);
+                                throw DsgRoundException.buildException(partyId, round, "Advance", e);
                             });
                 })
                 .toList();

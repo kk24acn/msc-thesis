@@ -8,7 +8,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import uk.ac.herts.orchestrator.api.filter.TraceIdFilter;
 import uk.ac.herts.orchestrator.client.blockchain.BlockchainClient;
-import uk.ac.herts.orchestrator.exception.BlockchainRpcException;
+import uk.ac.herts.orchestrator.exception.blockchain.BlockchainRpcException;
 import uk.ac.herts.orchestrator.repository.dao.TransactionDao;
 import uk.ac.herts.orchestrator.repository.entity.Transaction;
 import uk.ac.herts.orchestrator.repository.model.TransactionStatus;

@@ -33,9 +33,9 @@ public class TransactionSigner {
                 });
 
         String hexPayload = Numeric.toHexString(TransactionEncoder.encode(rawTx, dsgResult.signature()));
-        return new SignResult(hexPayload, dsgResult.retries());
+        return new SignResult(hexPayload, dsgResult.retries(), dsgResult.firstFaultAt());
     }
 
-    public record SignResult(String hexPayload, int retries) {
+    public record SignResult(String hexPayload, int retries, OffsetDateTime firstFaultAt) {
     }
 }

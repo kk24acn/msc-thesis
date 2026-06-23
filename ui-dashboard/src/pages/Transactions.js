@@ -34,7 +34,7 @@ const Transactions = () => {
         }
 
         return base
-            .filter((t) => t.traceId?.toLowerCase() === query)
+            .filter((t) => t.traceId?.toString().toLowerCase() === query)
             .sort((a, b) => {
                 const aTrace = isNaN(parseInt(a.traceId)) ? Infinity : parseInt(a.traceId);
                 const bTrace = isNaN(parseInt(b.traceId)) ? Infinity : parseInt(b.traceId);

@@ -8,7 +8,6 @@ public enum TransactionStatus {
     IN_MEMPOOL,
     CONFIRMED,
     CONFIRMED_SWEEPED,
-    STALLED,
     FAILED,
     CRYPTOGRAPHIC_ABORT,
     VERIFICATION_ABORT;

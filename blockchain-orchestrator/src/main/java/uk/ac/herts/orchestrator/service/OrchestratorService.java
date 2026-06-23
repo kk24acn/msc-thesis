@@ -2,6 +2,7 @@ package uk.ac.herts.orchestrator.service;
 
 import java.math.BigInteger;
 import java.math.RoundingMode;
+import java.time.OffsetDateTime;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -14,7 +15,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import uk.ac.herts.orchestrator.api.dto.SubmitTransactionRequest;
 import uk.ac.herts.orchestrator.api.dto.SubmitTransactionResponse;
-import uk.ac.herts.orchestrator.api.filter.TraceIdFilter;
 import uk.ac.herts.orchestrator.client.blockchain.BlockchainClient;
 import uk.ac.herts.orchestrator.client.blockchain.NonceManager;
 import uk.ac.herts.orchestrator.client.mpc.TransactionSigner;
@@ -47,19 +47,23 @@ public class OrchestratorService {
 
         Transaction tx = transactionDao.createTransaction(fromAddress, request.toAddress(), request.amountEther());
 
-        String traceId = MDC.get(TraceIdFilter.TRACE_ID_MDC_KEY);
         virtualThreadExecutor.execute(() -> {
-            if (traceId != null) {
-                MDC.put(TraceIdFilter.TRACE_ID_MDC_KEY, traceId);
+            if (tx.getTraceId() != null) {
+                MDC.put("traceId", tx.getTraceId().toString());
             }
             try {
                 sign(tx, mpcKey);
             } catch (TransactionSigningException e) {
                 Throwable cause = e.getCause();
+                OffsetDateTime firstFaultAt = cause instanceof SignatureGenerationException sigEx
+                        ? sigEx.getFirstFaultAt()
+                        : null;
                 if (cause instanceof SignatureVerificationException) {
-                    transactionDao.markVerificationAborted(tx, ErrorUtils.buildErrorMessage("Signing phase failed", e));
+                    transactionDao.markVerificationAborted(tx, ErrorUtils.buildErrorMessage("Signing phase failed", e),
+                            firstFaultAt);
                 } else {
-                    transactionDao.markAborted(tx, ErrorUtils.buildErrorMessage("Signing phase failed", e));
+                    transactionDao.markAborted(tx, ErrorUtils.buildErrorMessage("Signing phase failed", e),
+                            firstFaultAt);
                 }
             } catch (Exception e) {
                 transactionDao.markFailed(tx,
@@ -96,7 +100,8 @@ public class OrchestratorService {
                     valueWei);
 
             TransactionSigner.SignResult signResult = transactionSigner.sign(rawTx, tx, mpcKey);
-            return transactionDao.markSigned(tx, signResult.hexPayload(), signResult.retries());
+            return transactionDao.markSigned(tx, signResult.hexPayload(), signResult.retries(),
+                    signResult.firstFaultAt());
         } catch (SignatureGenerationException e) {
             transaction.setSigningRetries(e.getRetries());
             throw new TransactionSigningException(

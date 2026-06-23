@@ -65,9 +65,7 @@ const transformDbRecord = (dbTx) => {
         : 'Unknown';
 
     const waitTiming = signingStartedAt ? formatDuration(signingStartedAt - startTime) : null;
-    const signedTiming = signedAt
-        ? (signingStartedAt ? formatDuration(signedAt - signingStartedAt) : formatDuration(signedAt - startTime))
-        : null;
+    const signedTiming = signedAt && signingStartedAt ? formatDuration(signedAt - signingStartedAt) : null;
     const submittedTiming = submittedAt && signedAt ? formatDuration(submittedAt - signedAt) : null;
     const confirmedTiming = confirmedAt && submittedAt ? formatDuration(confirmedAt - submittedAt) : null;
 
@@ -187,6 +185,7 @@ const transformDbRecord = (dbTx) => {
         sweeperSigningRetries,
         isSweeped,
         pureExecMs: confirmedAt && signingStartedAt ? confirmedAt.getTime() - signingStartedAt.getTime() : null,
+        signedTimingMs: signedAt && signingStartedAt ? signedAt.getTime() - signingStartedAt.getTime() : null,
         logs,
     };
 };

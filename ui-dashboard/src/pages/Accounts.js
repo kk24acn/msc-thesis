@@ -30,8 +30,8 @@ const Accounts = () => {
 
         return accounts.filter(
             (acc) =>
-                acc.address.toLowerCase().includes(query) ||
-                acc.keyId.toLowerCase().includes(query),
+                acc.address?.toString().toLowerCase().includes(query) ||
+                acc.keyId?.toString().toLowerCase().includes(query),
         );
     }, [accounts, search]);
 

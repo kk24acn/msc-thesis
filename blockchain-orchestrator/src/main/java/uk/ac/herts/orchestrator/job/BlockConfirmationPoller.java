@@ -20,7 +20,7 @@ public class BlockConfirmationPoller {
     private final TransactionDao transactionDao;
     private BigInteger lastProcessedBlock = BigInteger.ZERO;
 
-    @Scheduled(fixedDelayString = "${spring.hardhat.block-confirmation-poller.interval-ms:1000}")
+    @Scheduled(fixedDelayString = "${spring.hardhat.block-confirmation-poller.interval-ms:5000}")
     public void poll() {
         try {
             BigInteger latestBlock = BigInteger.valueOf(blockchainClient.fetchCurrentBlockNumber());

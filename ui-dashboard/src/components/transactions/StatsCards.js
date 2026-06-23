@@ -1,4 +1,4 @@
-import { TrendingUp, Clock, Zap, Activity, RefreshCw, Timer, Shield } from 'lucide-react';
+import { TrendingUp, Clock, Zap, Activity, RefreshCw, Timer, Shield, Key } from 'lucide-react';
 
 const formatAvgRetries = (avg) => {
     if (avg === 0) return '0';
@@ -34,6 +34,17 @@ const TransactionsStats = ({ transactions }) => {
             completedWithPureExec.reduce((acc, t) => acc + t.pureExecMs, 0) /
             completedWithPureExec.length;
         meanPureExecTime = meanPureMs > 0 ? `${(meanPureMs / 1000).toFixed(1)}s` : '--';
+    }
+
+    let meanPureSigningTime = '--';
+    const completedNotSweepedWithSigning = transactions.filter(
+        (t) => t.status === 'completed' && !t.isSweeped && t.signedTimingMs != null
+    );
+    if (completedNotSweepedWithSigning.length > 0) {
+        const meanSignedMs =
+            completedNotSweepedWithSigning.reduce((acc, t) => acc + t.signedTimingMs, 0) /
+            completedNotSweepedWithSigning.length;
+        meanPureSigningTime = meanSignedMs >= 0 ? (meanSignedMs < 1000 ? `${Math.round(meanSignedMs)}ms` : `${(meanSignedMs / 1000).toFixed(1)}s`) : '--';
     }
 
     const totalRetries = transactions.reduce(
@@ -105,7 +116,7 @@ const TransactionsStats = ({ transactions }) => {
                     <p className="text-xs text-darcula-muted mt-1">({completed}/{transactions.length})</p>
                 </div>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                 <div className="card-bordered rounded-2xl p-4">
                     <div className="flex items-center justify-between mb-2">
                         <span className="label-sm">Mean Exec Time</span>
@@ -121,6 +132,14 @@ const TransactionsStats = ({ transactions }) => {
                     </div>
                     <p className="stat-value text-darcula-cyan">{meanPureExecTime}</p>
                     <p className="text-xs text-darcula-muted mt-1">excl. queued time</p>
+                </div>
+                <div className="card-bordered rounded-2xl p-4">
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="label-sm">Mean Signing Time</span>
+                        <Key className="w-4 h-4 text-darcula-cyan" />
+                    </div>
+                    <p className="stat-value text-darcula-cyan">{meanPureSigningTime}</p>
+                    <p className="text-xs text-darcula-muted mt-1">confirmed, non-sweeped</p>
                 </div>
                 <div className="card-bordered rounded-2xl p-4">
                     <div className="flex items-center justify-between mb-2">

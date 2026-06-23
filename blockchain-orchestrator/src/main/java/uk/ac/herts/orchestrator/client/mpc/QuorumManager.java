@@ -1,7 +1,5 @@
 package uk.ac.herts.orchestrator.client.mpc;
 
-import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -17,6 +15,7 @@ import org.springframework.stereotype.Component;
 import io.grpc.StatusRuntimeException;
 import lombok.extern.slf4j.Slf4j;
 import uk.ac.herts.orchestrator.client.mpc.config.MpcProperties;
+import uk.ac.herts.orchestrator.client.mpc.quarantine.QuarantineStrategy;
 import uk.ac.herts.orchestrator.exception.mpc.DsgRoundException;
 import uk.ac.herts.orchestrator.exception.mpc.QuorumException;
 
@@ -28,29 +27,19 @@ public class QuorumManager {
             Pattern.CASE_INSENSITIVE);
 
     private final MpcProperties mpcProperties;
+    private final QuarantineStrategy quarantineStrategy;
     private final AtomicLong lastEvictionTimeMs = new AtomicLong(0);
-
-    private final ConcurrentHashMap<Integer, QuarantineEntry> quarantinedNodes = new ConcurrentHashMap<>();
-    private final ReentrantLock quarantineLock = new ReentrantLock();
+    private final ReentrantLock snapshotLock = new ReentrantLock();
 
     private volatile Set<Integer> allNodeIds = Set.of();
     private volatile QuorumSnapshot snapshot = QuorumSnapshot.empty();
 
-    public QuorumManager(MpcProperties mpcProperties) {
+    public QuorumManager(MpcProperties mpcProperties, QuarantineStrategy quarantineStrategy) {
         this.mpcProperties = mpcProperties;
+        this.quarantineStrategy = quarantineStrategy;
     }
 
-    public record QuarantineEntry(
-            int partyId,
-            int accuserPartyId,
-            String reason,
-            Instant quarantinedAt,
-            Instant expiresAt) {
-    }
-
-    private record QuorumSnapshot(
-            List<Integer> availableNodes,
-            Set<Integer> quarantinedIds,
+    private record QuorumSnapshot(List<Integer> availableNodes, Set<Integer> quarantinedIds,
             ConcurrentHashMap<Integer, List<List<Integer>>> combinationsByThreshold) {
 
         static QuorumSnapshot empty() {
@@ -65,10 +54,11 @@ public class QuorumManager {
     public void initialize(Set<Integer> nodeIds) {
         this.allNodeIds = Set.copyOf(nodeIds);
         rebuildSnapshot();
-        log.info("QuorumManager initialized with {} nodes: {}", nodeIds.size(), nodeIds);
+        log.info("QuorumManager initialized with {} nodes: {} (mode: {})",
+                nodeIds.size(), nodeIds, mpcProperties.getQuarantine().getMode());
     }
 
-    public List<List<Integer>> getAvailableQuorums(int threshold) {
+    public List<Integer> selectQuorum(int threshold, int roundRobinIndex) {
         evictExpired();
         QuorumSnapshot snap = this.snapshot;
 
@@ -76,8 +66,11 @@ public class QuorumManager {
             throw new QuorumException(snap.availableNodes().size(), threshold, snap.quarantinedIds());
         }
 
-        return snap.combinationsByThreshold().computeIfAbsent(
+        List<List<Integer>> combinations = snap.combinationsByThreshold().computeIfAbsent(
                 threshold, t -> generateCombinations(snap.availableNodes(), t));
+
+        List<Integer> baseQuorum = combinations.get(roundRobinIndex % combinations.size());
+        return quarantineStrategy.adjustQuorum(baseQuorum);
     }
 
     public Set<Integer> getQuarantinedPartyIds() {
@@ -86,58 +79,53 @@ public class QuorumManager {
 
     public boolean processBanRequest(Throwable exception, int threshold) {
         Optional<Integer> accusedPartyId = parseAccusedPartyFromChain(exception);
-        if (accusedPartyId.isEmpty()) {
+        int failedPartyId = DsgRoundException.extractReportingPartyId(exception);
+
+        int accused;
+        int accuserPartyId;
+        String reason;
+
+        if (accusedPartyId.isPresent()) {
+            accused = accusedPartyId.get();
+            accuserPartyId = failedPartyId;
+            reason = DsgRoundException.extractGrpcDescription(exception);
+        } else if (failedPartyId != -1) {
+            accused = failedPartyId;
+            accuserPartyId = -1;
+            reason = "Node unresponsive: " + DsgRoundException.extractGrpcDescription(exception);
+        } else {
             return false;
         }
-
-        int accused = accusedPartyId.get();
-        int accuserPartyId = DsgRoundException.extractReportingPartyId(exception);
-        String reason = DsgRoundException.extractGrpcDescription(exception);
 
         return tryQuarantine(accused, accuserPartyId, reason, threshold);
     }
 
-    private boolean tryQuarantine(int accusedPartyId, int accuserPartyId, String reason, int threshold) {
-        if (!mpcProperties.getQuarantine().isEnabled()) {
-            log.debug("Quarantine is disabled, ignoring ban request for party {}", accusedPartyId);
-            return false;
-        }
-
-        quarantineLock.lock();
-        try {
-            evictExpiredUnderLock();
-
-            if (quarantinedNodes.containsKey(accusedPartyId)) {
-                log.info("Party {} is already quarantined", accusedPartyId);
-                return false;
-            }
-
-            int currentlyAvailable = allNodeIds.size() - quarantinedNodes.size();
-            if (currentlyAvailable - 1 < threshold) {
-                log.error(
-                        "REFUSING to quarantine party {}: would leave {} available nodes, which is below threshold {}"
-                                + " Accuser: party {}, reason: {}",
-                        accusedPartyId, currentlyAvailable - 1, threshold, accuserPartyId, reason);
-                return false;
-            }
-
-            Duration ttl = mpcProperties.getQuarantine().getTtl();
-            Instant now = Instant.now();
-            quarantinedNodes.put(accusedPartyId, new QuarantineEntry(
-                    accusedPartyId, accuserPartyId, reason, now, now.plus(ttl)));
-
-            log.warn("QUARANTINED party {} (accused by party {}). Reason: {}. TTL: {}",
-                    accusedPartyId, accuserPartyId, reason, ttl);
-
+    public void onQuorumSuccess(List<Integer> quorum) {
+        if (quarantineStrategy.onQuorumSuccess(quorum)) {
             rebuildSnapshot();
-            return true;
+        }
+    }
+
+    public void onQuorumFailure(List<Integer> quorum) {
+        quarantineStrategy.onQuorumFailure(quorum);
+    }
+
+    private boolean tryQuarantine(int accusedPartyId, int accuserPartyId, String reason, int threshold) {
+        snapshotLock.lock();
+        try {
+            boolean quarantined = quarantineStrategy.quarantine(accusedPartyId, accuserPartyId, reason,
+                    allNodeIds.size(), threshold);
+            if (quarantined) {
+                rebuildSnapshot();
+            }
+            return quarantined;
         } finally {
-            quarantineLock.unlock();
+            snapshotLock.unlock();
         }
     }
 
     private void rebuildSnapshot() {
-        Set<Integer> quarantined = Set.copyOf(quarantinedNodes.keySet());
+        Set<Integer> quarantined = quarantineStrategy.getQuarantinedIds();
         List<Integer> available = allNodeIds.stream()
                 .filter(id -> !quarantined.contains(id))
                 .sorted()
@@ -146,7 +134,7 @@ public class QuorumManager {
     }
 
     private void evictExpired() {
-        if (quarantinedNodes.isEmpty()) {
+        if (snapshot.quarantinedIds().isEmpty()) {
             return;
         }
 
@@ -154,30 +142,15 @@ public class QuorumManager {
         long lastCheck = lastEvictionTimeMs.get();
         if (now - lastCheck > mpcProperties.getQuarantine().getEvictionIntervalMs()) {
             if (lastEvictionTimeMs.compareAndSet(lastCheck, now)) {
-                quarantineLock.lock();
+                snapshotLock.lock();
                 try {
-                    evictExpiredUnderLock();
+                    if (quarantineStrategy.evictExpired()) {
+                        rebuildSnapshot();
+                    }
                 } finally {
-                    quarantineLock.unlock();
+                    snapshotLock.unlock();
                 }
             }
-        }
-    }
-
-    private void evictExpiredUnderLock() {
-        Instant now = Instant.now();
-        boolean anyEvicted = quarantinedNodes.entrySet().removeIf(entry -> {
-            if (entry.getValue().expiresAt().isBefore(now)) {
-                log.info("Quarantine expired for party {} (was quarantined at {}, accused by party {})",
-                        entry.getKey(),
-                        entry.getValue().quarantinedAt(),
-                        entry.getValue().accuserPartyId());
-                return true;
-            }
-            return false;
-        });
-        if (anyEvicted) {
-            rebuildSnapshot();
         }
     }
 

@@ -1,4 +1,16 @@
 spring:
+  threads:
+    virtual:
+      enabled: true
+  task:
+    scheduling:
+      shutdown:
+        await-termination: true
+  application:
+    name: blockchain-orchestrator
+  main:
+    web-application-type: servlet
+
   datasource:
     username: sa
     password: password
@@ -8,18 +20,36 @@ spring:
   jpa:
     hibernate:
       ddl-auto: create-drop
+    show-sql: false
+    open-in-view: false
 
   hardhat:
-    rpc-url: http://127.0.0.1:8545
-    max-retries: 3
-    gas-limit: 21000
-    request-timeout: 10s
-    retry-backoff: 300ms
-    receipt-poll-interval: 1s
+    rpc-url: ${HARDHAT_RPC_URL:http://127.0.0.1:8545}
+    max-retries: ${HARDHAT_MAX_RETRIES:3}
+    gas-limit: ${HARDHAT_GAS_LIMIT:21000}
+    retry-backoff: ${HARDHAT_RETRY_BACKOFF:300ms}
+    gas-price-cache-ttl: ${HARDHAT_GAS_PRICE_CACHE_TTL:2s}
+    block-number-cache-ttl: ${HARDHAT_BLOCK_NUMBER_CACHE_TTL:2s}
+    block-confirmation-poller:
+      interval-ms: ${HARDHAT_BLOCK_CONFIRMATION_POLLER_INTERVAL_MS:5000}
+    submission-worker:
+      interval-ms: ${HARDHAT_SUBMISSION_WORKER_INTERVAL_MS:1000}
+      max-mempool-queue-size: ${HARDHAT_MAX_MEMPOOL_QUEUE_SIZE:60}
 
   mpc:
-    signer-addresses: 127.0.0.1:50051,127.0.0.1:50052,127.0.0.1:50053
+    grpc-concurrency-limit: ${GRPC_CONCURRENCY_LIMIT:10}
+    signer-addresses: ${SIGNER_RPC_URLS:127.0.0.1:50051,127.0.0.1:50052,127.0.0.1:50053}
     dsg:
-      max-retries: 3
-      request-timeout: 10s
-      eth-derivation-path: m/0
+      max-retries: ${DSG_MAX_RETRIES:3}
+      max-rounds: ${DSG_MAX_ROUNDS:5}
+      request-timeout: ${DSG_REQUEST_TIMEOUT:2s}
+      eth-derivation-path: ${DSG_ETH_DERIVATION_PATH:m/0}
+    quarantine:
+      mode: ${QUARANTINE_MODE:DISABLED} # Options: DISABLED | SOFT | STRICT | CIRCUIT_BREAKER
+      eviction-interval-ms: ${QUARANTINE_EVICTION_INTERVAL_MS:1000}
+      ttl: ${QUARANTINE_TTL:10s}
+      probe-interval: ${QUARANTINE_PROBE_INTERVAL:10}
+      failure-threshold: ${QUARANTINE_FAILURE_THRESHOLD:5}
+    nonce-gap-sweeper:
+      enabled: ${NONCE_GAP_SWEEPER_ENABLED:true}
+      interval-ms: ${NONCE_GAP_SWEEPER_INTERVAL_MS:5000}

@@ -70,7 +70,7 @@ services:
       additional_contexts:
         shared_proto: ./util/proto
     environment:
-      - RUST_LOG=debug
+      - RUST_LOG=info
     command: ["--addr", "0.0.0.0:50051", "--party-id", "1", "--db-path", "/app/data/node.redb"]
     ports:
       - "50051:50051"
@@ -86,7 +86,7 @@ services:
       additional_contexts:
         shared_proto: ./util/proto
     environment:
-      - RUST_LOG=debug
+      - RUST_LOG=info
     command: ["--addr", "0.0.0.0:50051", "--party-id", "2", "--db-path", "/app/data/node.redb"]
     ports:
       - "50052:50051"
@@ -102,7 +102,7 @@ services:
       additional_contexts:
         shared_proto: ./util/proto
     environment:
-      - RUST_LOG=debug
+      - RUST_LOG=info
     command: ["--addr", "0.0.0.0:50051", "--party-id", "3", "--db-path", "/app/data/node.redb"]
     ports:
       - "50053:50051"
@@ -126,6 +126,7 @@ services:
       - HARDHAT_RPC_URL=http://hardhat:8545
       - SIGNER_RPC_URLS=faultlab-proxy-1:50051,faultlab-proxy-2:50051,faultlab-proxy-3:50051
       - GRPC_CONCURRENCY_LIMIT=${GRPC_CONCURRENCY_LIMIT:-10}
+      - QUARANTINE_MODE=${QUARANTINE_MODE:-DISABLED} # Options: DISABLED | SOFT | STRICT | CIRCUIT_BREAKER
     networks:
       - signer
       - orchestrator

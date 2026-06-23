@@ -81,8 +81,8 @@ class ProxyControlPlaneClient:
         await self._gather_and_verify([self._post(url, "/inject", payload) for url in urls], urls=urls)
 
         logger.info(
-            f"Injected {fault_type} on signers={signers} (rate={failure_rate}%, "
-            f"rounds={rounds}, until_retry={inject_until_retry}, until_trace_id={until_trace_id})"
+            f"Injected {fault_type} on signers={signers if signers else "ALL"} (rate={failure_rate}%, "
+            f"rounds={rounds if rounds else "ALL"}, until_retry={inject_until_retry}, until_trace_id={until_trace_id})"
         )
 
     async def reset_all(self) -> None:

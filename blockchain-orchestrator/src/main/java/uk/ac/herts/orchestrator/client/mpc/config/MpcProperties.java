@@ -63,8 +63,10 @@ public class MpcProperties {
     @Getter
     @Setter
     public static class QuarantineProperties {
-        private boolean enabled = true;
+        private QuarantineStrategyFactory.QuarantineMode mode;
         private long evictionIntervalMs;
         private Duration ttl = Duration.ofSeconds(30);
+        private int probeInterval = 10;
+        private int failureThreshold = 5;
     }
 }

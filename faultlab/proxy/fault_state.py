@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import random
 import threading
 from dataclasses import dataclass, field
 from enum import Enum
@@ -89,13 +90,16 @@ class FaultState:
     def resolve_fault(
         self, trace_id: str, retry_count: int = 0, is_init: bool = False
     ) -> tuple[FaultConfig | None, int]:
-        def is_trace_targeted(trace_id: str | int, failure_rate: int) -> bool:
-            try:
-                numeric_id = int(trace_id)
-            except (ValueError, TypeError):
+        def is_trace_targeted(failure_rate: int) -> bool:
+            if trace_id and str(trace_id).startswith("SWEEP"):
+                return False  # Sweeper is exempt from chaos
+
+            if failure_rate <= 0:
                 return False
-            divisor = int(100 / failure_rate)
-            return divisor > 0 and numeric_id % divisor == 0
+            if failure_rate >= 100:
+                return True
+
+            return random.randint(1, 100) <= failure_rate
 
         fault = self._current_fault
 
@@ -108,7 +112,7 @@ class FaultState:
         current_round = self._round_counters[trace_id]
 
         # Check if trace should be bypassed
-        if not fault.enabled or not is_trace_targeted(trace_id, fault.failure_rate):
+        if not fault.enabled or not is_trace_targeted(fault.failure_rate):
             return None, current_round
 
         # Check if retry should be bypassed

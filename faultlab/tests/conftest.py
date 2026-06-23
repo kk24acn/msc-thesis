@@ -23,6 +23,11 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
+EVAL_RESULTS_BASE_DIR = "EVALUATION"
+EVAL_BATCH_SIZE = 1000
+SUBMISSION_CONCURRENCY = 100
+
+
 async def setup_and_fund_mpc_accounts(
     mpc_keys_repository: MpcKeysRepository,
     dkg_client: DkgClient,
@@ -165,8 +170,7 @@ def collect_db_state(
 
     Marker kwargs:
     - results_subdir: str  — subdirectory under tests/results/ (default: "")
-    - disable_ui: bool     — stop dashboard containers before the test and restart them
-                             after DB stabilises + CSV is saved (default: False)
+    - disable_ui: bool     — stop dashboard containers before the test and restart them after DB stabilises + CSV is saved (default: False)
     """
     marker = request.node.get_closest_marker("collect_db_state")
     disable_ui = marker.kwargs.get("disable_ui", False) if marker else False
@@ -233,13 +237,14 @@ def blockchain_refresh(
     - funding_amount_eth: str - Amount in ETH to fund each account (default: 10_000)
 
     Performs:
-    1. Restarts hardhat (resets chain state)
+    1. Restarts hardhat
     2. Clears keyshare DBs on signer nodes
     3. Truncates transactions table
     4. Truncates mpc_accounts table
-    5. Restarts orchestrator (resets nonce counters)
+    5. Restarts the orchestrator, applying the specified custom configuration options
     6. Generates and funds new MPC accounts set
     """
+
     if request.node.get_closest_marker("blockchain_refresh") is None:
         return
 
@@ -247,10 +252,12 @@ def blockchain_refresh(
     num_accounts = marker.kwargs.get("num_accounts", 10)
     funding_amount_eth = marker.kwargs.get("funding_amount_eth", "10000")
     grpc_concurrency_limit = marker.kwargs.get("grpc_concurrency_limit", None)
+    quarantine_mode = marker.kwargs.get("quarantine_mode", None)  # Options: DISABLED | SOFT | STRICT | CIRCUIT_BREAKER
 
     logger.info(f"Blockchain refresh triggered for test (num_accounts={num_accounts}, funding={funding_amount_eth} ETH)") # fmt: skip
 
-    orchestrator_env = ({"GRPC_CONCURRENCY_LIMIT": str(grpc_concurrency_limit)} if grpc_concurrency_limit is not None else None) # fmt: skip
+    orchestrator_env =  ({"GRPC_CONCURRENCY_LIMIT": str(grpc_concurrency_limit)} if grpc_concurrency_limit is not None else {}) \
+                                    |   ({"QUARANTINE_MODE": str(quarantine_mode)} if quarantine_mode is not None else {}) # fmt: skip
 
     async def refresh():
         await asyncio.gather(
@@ -260,7 +267,7 @@ def blockchain_refresh(
             asyncio.to_thread(mpc_keys_repository.truncate),
         )
         await asyncio.gather(
-            docker_client.restart_orchestrator(env_overrides=orchestrator_env),
+            docker_client.restart_orchestrator(env_overrides=orchestrator_env if len(orchestrator_env) > 0 else None),
             docker_client.restart_proxies(),
             setup_and_fund_mpc_accounts(
                 mpc_keys_repository,

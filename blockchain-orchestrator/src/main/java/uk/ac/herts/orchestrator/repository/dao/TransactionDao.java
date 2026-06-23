@@ -2,20 +2,16 @@ package uk.ac.herts.orchestrator.repository.dao;
 
 import org.springframework.stereotype.Component;
 
-import uk.ac.herts.orchestrator.api.filter.TraceIdFilter;
 import uk.ac.herts.orchestrator.repository.TransactionRepository;
 import uk.ac.herts.orchestrator.repository.entity.Transaction;
 import uk.ac.herts.orchestrator.repository.model.TransactionStatus;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
-
-import org.slf4j.MDC;
 
 @Component
 public class TransactionDao {
@@ -27,16 +23,12 @@ public class TransactionDao {
     }
 
     public Transaction createTransaction(String fromAddress, String toAddress, BigDecimal amountEther) {
-        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         Transaction newTransaction = Transaction.builder()
                 .id(UUID.randomUUID())
                 .fromAddress(fromAddress)
                 .toAddress(toAddress)
                 .amountEther(amountEther)
                 .status(TransactionStatus.NEW)
-                .createdAt(now)
-                .updatedAt(now)
-                .traceId(MDC.get(TraceIdFilter.TRACE_ID_MDC_KEY))
                 .build();
         return repository.save(newTransaction);
     }
@@ -44,104 +36,101 @@ public class TransactionDao {
     public Transaction markSigning(Transaction transaction, Long nonce) {
         transaction.setStatus(TransactionStatus.SIGNING);
         transaction.setNonce(nonce);
-        transaction.touchUpdatedAt();
         return repository.save(transaction);
     }
 
     public Transaction markSigningStarted(Transaction transaction) {
         Transaction fresh = repository.findById(transaction.getId()).orElse(transaction);
-        fresh.setSigningStartedAt(OffsetDateTime.now(ZoneOffset.UTC));
-        fresh.touchUpdatedAt();
+        fresh.setSigningStartedAt(transaction.getSigningStartedAt());
         return repository.save(fresh);
     }
 
-    public Transaction markSigned(Transaction transaction, String hexPayload, int signingRetries) {
+    public Transaction markSigned(Transaction transaction, String hexPayload, int signingRetries,
+            OffsetDateTime firstFaultAt) {
         Transaction fresh = repository.findById(transaction.getId()).orElse(transaction);
-        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         fresh.setStatus(TransactionStatus.SIGNED);
         fresh.setSignedHexPayload(hexPayload);
         fresh.setSigningRetries(signingRetries);
         fresh.setSigningStartedAt(transaction.getSigningStartedAt());
         fresh.setSignedAt(transaction.getSignedAt());
-        fresh.setUpdatedAt(now);
+        recordFirstFault(fresh, firstFaultAt);
         return repository.save(fresh);
     }
 
-    public Transaction markSweeperSigned(Transaction transaction, String hexPayload, int signingRetries) {
+    public Transaction markSweeperSigned(Transaction transaction, String hexPayload, int signingRetries,
+            OffsetDateTime firstFaultAt) {
         Transaction fresh = repository.findById(transaction.getId()).orElse(transaction);
         Integer sweeperRetriesRem = Objects.requireNonNullElse(fresh.getSweeperSigningRetries(), 0);
-        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         fresh.setStatus(TransactionStatus.SIGNED);
         fresh.setSignedHexPayload(hexPayload);
         fresh.setSweeperSigningRetries(sweeperRetriesRem + signingRetries);
-        fresh.setUpdatedAt(now);
+        recordFirstFault(fresh, firstFaultAt);
         return repository.save(fresh);
     }
 
     public Transaction markSubmitting(Transaction transaction) {
         transaction.setStatus(TransactionStatus.SUBMITTING);
-        transaction.touchUpdatedAt();
         return repository.save(transaction);
     }
 
     public Transaction markInMempool(Transaction transaction, String transactionHash,
             long submissionBlock, int submissionRetries) {
-        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         transaction.setStatus(TransactionStatus.IN_MEMPOOL);
         transaction.setHash(transactionHash);
         transaction.setSubmissionBlock(submissionBlock);
         transaction.setSubmissionRetries(submissionRetries);
-        transaction.setSubmittedAt(now);
-        transaction.setUpdatedAt(now);
-        return repository.save(transaction);
-    }
-
-    public Transaction markStalled(Transaction transaction) {
-        transaction.setStatus(TransactionStatus.STALLED);
-        transaction.touchUpdatedAt();
+        transaction.setSubmittedAt(OffsetDateTime.now());
         return repository.save(transaction);
     }
 
     public Transaction markFailed(Transaction transaction, String errorMessage) {
-        return markFailed(transaction, errorMessage, 0);
+        return markFailed(transaction, errorMessage, 0, null);
     }
 
     public Transaction markFailed(Transaction transaction, String errorMessage, int submissionRetries) {
+        return markFailed(transaction, errorMessage, submissionRetries, null);
+    }
+
+    public Transaction markFailed(Transaction transaction, String errorMessage,
+            int submissionRetries, OffsetDateTime firstFaultAt) {
         Transaction fresh = repository.findById(transaction.getId()).orElse(transaction);
-        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         fresh.setStatus(TransactionStatus.FAILED);
         fresh.setErrorMessage(errorMessage);
         fresh.setSubmissionRetries(submissionRetries);
-        fresh.setFailedAt(now);
-        fresh.setUpdatedAt(now);
+        fresh.setFailedAt(OffsetDateTime.now());
+        recordFirstFault(fresh, firstFaultAt);
         return repository.save(fresh);
     }
 
-    public Transaction markAborted(Transaction transaction, String errorMessage) {
+    public Transaction markAborted(Transaction transaction, String errorMessage, OffsetDateTime firstFaultAt) {
         Transaction fresh = repository.findById(transaction.getId()).orElse(transaction);
-        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         fresh.setStatus(TransactionStatus.CRYPTOGRAPHIC_ABORT);
         fresh.setErrorMessage(errorMessage);
         fresh.setSigningRetries(transaction.getSigningRetries());
-        fresh.setFailedAt(now);
-        fresh.setUpdatedAt(now);
+        fresh.setFailedAt(OffsetDateTime.now());
+        recordFirstFault(fresh, firstFaultAt);
         return repository.save(fresh);
     }
 
-    public Transaction markVerificationAborted(Transaction transaction, String errorMessage) {
+    public Transaction markVerificationAborted(Transaction transaction, String errorMessage,
+            OffsetDateTime firstFaultAt) {
         Transaction fresh = repository.findById(transaction.getId()).orElse(transaction);
-        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         fresh.setStatus(TransactionStatus.VERIFICATION_ABORT);
         fresh.setErrorMessage(errorMessage);
         fresh.setSigningRetries(transaction.getSigningRetries());
-        fresh.setFailedAt(now);
-        fresh.setUpdatedAt(now);
+        fresh.setFailedAt(OffsetDateTime.now());
+        recordFirstFault(fresh, firstFaultAt);
         return repository.save(fresh);
     }
 
+    private void recordFirstFault(Transaction transaction, OffsetDateTime firstFaultAt) {
+        if (firstFaultAt != null && transaction.getFirstFaultAt() == null) {
+            transaction.setFirstFaultAt(firstFaultAt);
+        }
+    }
+
     public int confirmTransactions(List<String> hashes, Long blockNumber) {
-        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-        return repository.confirmTransactions(hashes, blockNumber, now);
+        return repository.confirmTransactions(hashes, blockNumber);
     }
 
     public Transaction incrementSweeperAttempts(Transaction transaction) {
@@ -149,7 +138,6 @@ public class TransactionDao {
         int current = fresh.getSweeperAttempts() == null ? 0 : fresh.getSweeperAttempts();
         fresh.setSweeperAttempts(current + 1);
         fresh.setAmountEther(BigDecimal.ZERO);
-        fresh.touchUpdatedAt();
         return repository.save(fresh);
     }
 

@@ -6,7 +6,6 @@ import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import uk.ac.herts.orchestrator.api.filter.TraceIdFilter;
 import uk.ac.herts.orchestrator.client.blockchain.BlockchainClient;
 import uk.ac.herts.orchestrator.exception.blockchain.BlockchainRpcException;
 import uk.ac.herts.orchestrator.repository.dao.TransactionDao;
@@ -64,9 +63,8 @@ public class SubmissionWorker {
     }
 
     private void submitTransaction(Transaction transaction) {
-        String traceId = transaction.getTraceId();
-        if (traceId != null) {
-            MDC.put(TraceIdFilter.TRACE_ID_MDC_KEY, traceId);
+        if (transaction.getTraceId() != null) {
+            MDC.put("traceId", transaction.getTraceId().toString());
         }
 
         log.info("Submitting transaction id={}, nonce={}, from={}",

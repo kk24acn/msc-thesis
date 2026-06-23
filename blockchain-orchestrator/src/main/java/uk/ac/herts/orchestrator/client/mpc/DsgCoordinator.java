@@ -1,5 +1,6 @@
 package uk.ac.herts.orchestrator.client.mpc;
 
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -20,7 +21,6 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.google.protobuf.ByteString;
 
 import lombok.extern.slf4j.Slf4j;
-import uk.ac.herts.orchestrator.api.filter.TraceIdFilter;
 import uk.ac.herts.orchestrator.client.mpc.config.MpcProperties;
 import uk.ac.herts.orchestrator.client.mpc.grpc.TraceIdClientInterceptor;
 import uk.ac.herts.orchestrator.exception.mpc.DsgRoundException;
@@ -61,7 +61,7 @@ public class DsgCoordinator {
         log.info("{} initiated with GRPC_CONCURRENCY_LIMIT={}", this.getClass().getName(), concurrencyLimit);
     }
 
-    public record DsgResult(SignatureData signature, int retries) {
+    public record DsgResult(SignatureData signature, int retries, OffsetDateTime firstFaultAt) {
     }
 
     public <T> T executeUnderConcurrencyLimit(Callable<T> task) {
@@ -89,13 +89,13 @@ public class DsgCoordinator {
         int maxAttempts = mpcProperties.getDsg().getMaxRetries() + 1;
         int quarantineBudget = stubs.size() - mpcKey.getThreshold();
         Exception lastException = null;
+        OffsetDateTime firstFaultAt = null;
         int actualAttempt = 0;
         int localRoundRobin = Math.abs(globalRoundRobinCounter.getAndIncrement());
 
         for (int i = 0; i < maxAttempts; i++) {
             actualAttempt++;
-            List<List<Integer>> quorums = quorumManager.getAvailableQuorums(mpcKey.getThreshold());
-            List<Integer> quorum = quorums.get(localRoundRobin % quorums.size());
+            List<Integer> quorum = quorumManager.selectQuorum(mpcKey.getThreshold(), localRoundRobin);
             localRoundRobin++;
             String dsgSessionId = UUID.randomUUID().toString();
 
@@ -108,13 +108,22 @@ public class DsgCoordinator {
                 SignatureData sigData = processRounds(
                         dsgSessionId, quorum, messageHash, mpcKey.getEthereumAddress(), i, initialPayloads);
 
+                quorumManager.onQuorumSuccess(quorum);
                 log.info("DSG succeeded with session {}", dsgSessionId);
-                return new DsgResult(sigData, i);
+                return new DsgResult(sigData, i, firstFaultAt);
             } catch (SignatureAggregationException e) {
                 lastException = e;
+                if (firstFaultAt == null) {
+                    firstFaultAt = OffsetDateTime.now();
+                }
+                quorumManager.onQuorumFailure(quorum);
                 log.warn("Aggregation failure in quorum {}: {}. Retrying.", quorum, e.getMessage());
             } catch (Exception e) {
                 lastException = e;
+                if (firstFaultAt == null) {
+                    firstFaultAt = OffsetDateTime.now();
+                }
+                quorumManager.onQuorumFailure(quorum);
                 boolean banProcessed = quorumManager.processBanRequest(e, mpcKey.getThreshold());
                 if (banProcessed) {
                     if (quarantineBudget > 0) {
@@ -131,17 +140,17 @@ public class DsgCoordinator {
         if (lastException instanceof SignatureAggregationException) {
             throw new SignatureVerificationException(
                     "Quorum permutations failed. Last failure was an aggregation error",
-                    maxAttempts - 1, lastException, quorumManager.getQuarantinedPartyIds());
+                    maxAttempts - 1, lastException, quorumManager.getQuarantinedPartyIds(), firstFaultAt);
         } else {
             throw new SignatureGenerationException("All quorum permutations failed",
-                    maxAttempts - 1, lastException, quorumManager.getQuarantinedPartyIds());
+                    maxAttempts - 1, lastException, quorumManager.getQuarantinedPartyIds(), firstFaultAt);
         }
     }
 
     private DsgServiceFutureStub getStubWithDeadline(int partyId, int retry) {
         DsgServiceFutureStub stub = stubs.get(partyId)
                 .withDeadlineAfter(mpcProperties.getDsg().getRequestTimeout());
-        String traceId = MDC.get(TraceIdFilter.TRACE_ID_MDC_KEY);
+        String traceId = MDC.get("traceId");
         stub = stub.withInterceptors(new TraceIdClientInterceptor(traceId, retry));
         return stub;
     }
@@ -183,8 +192,7 @@ public class DsgCoordinator {
             log.info("Quorum {} initialized successfully with {} Phase 1 payloads", quorum, initialPayloads.size());
             return initialPayloads;
         } catch (Exception e) {
-            throw new DsgRoundException(String.format("Failed to initialize quorum %s", quorum), e, -1, 0, "UNKNOWN",
-                    "Init phase failed");
+            throw DsgRoundException.unwrap(e);
         }
     }
 
@@ -218,8 +226,7 @@ public class DsgCoordinator {
             } catch (SignatureAggregationException e) {
                 throw e;
             } catch (Exception e) {
-                throw new DsgRoundException(String.format("DSG round %d failed", round), e, -1, round, "UNKNOWN",
-                        "Round execution failed");
+                throw DsgRoundException.unwrap(e);
             }
         }
 

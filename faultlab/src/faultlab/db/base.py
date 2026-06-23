@@ -15,7 +15,7 @@ class ABCRepository(ABC):
 
     def truncate(self) -> int:
         with self.engine.begin() as conn:
-            result = conn.execute(text(f"DELETE FROM {self.table_name}"))
+            result = conn.execute(text(f"TRUNCATE TABLE {self.table_name} RESTART IDENTITY"))
             return result.rowcount
 
     def count(self) -> int:

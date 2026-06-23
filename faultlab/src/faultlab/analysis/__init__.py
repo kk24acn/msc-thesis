@@ -13,14 +13,13 @@ ALL_STATUSES: list[str] = [
     "IN_MEMPOOL",
     "CONFIRMED",
     "CONFIRMED_SWEEPED",
-    "STALLED",
     "FAILED",
     "CRYPTOGRAPHIC_ABORT",
+    "VERIFICATION_ABORT",
 ]
-SUCCESS_STATUSES: frozenset[str] = frozenset(["CONFIRMED", "CONFIRMED_SWEEPED"])
 FAILURE_STATUSES: frozenset[str] = frozenset(["FAILED", "CRYPTOGRAPHIC_ABORT", "VERIFICATION_ABORT"])
-TERMINAL_STATUSES: frozenset[str] = frozenset({"CONFIRMED", "CONFIRMED_SWEEPED", "STALLED", "FAILED", "CRYPTOGRAPHIC_ABORT", "VERIFICATION_ABORT"}) # fmt: skip
-NON_TERMINAL_STATUSES: frozenset[str] = frozenset({"NEW", "SIGNING", "SIGNED", "SUBMITTING", "IN_MEMPOOL"})
+TERMINAL_STATUSES: frozenset[str] = frozenset({"CONFIRMED", "CONFIRMED_SWEEPED"})
+NON_TERMINAL_STATUSES: frozenset[str] = frozenset({"NEW", "SIGNING", "SIGNED", "SUBMITTING", "IN_MEMPOOL", "FAILED", "CRYPTOGRAPHIC_ABORT", "VERIFICATION_ABORT"}) # fmt: skip
 
 DATETIME_COLS: list[str] = [
     "created_at",
@@ -107,7 +106,7 @@ def enrich_latency_metrics(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def describe_latency_percentiles(df: pd.DataFrame, status: frozenset[str] = SUCCESS_STATUSES) -> pd.DataFrame:
+def describe_latency_percentiles(df: pd.DataFrame, status: frozenset[str] = TERMINAL_STATUSES) -> pd.DataFrame:
     cols = [c for c in LATENCY_COLS if c in df.columns]
     filtered = df[df["status"].isin(status)]
     return filtered[cols].describe(percentiles=[0.50, 0.75, 0.90, 0.95, 0.99])

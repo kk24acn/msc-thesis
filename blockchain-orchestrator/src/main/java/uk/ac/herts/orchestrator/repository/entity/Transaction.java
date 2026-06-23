@@ -2,11 +2,13 @@ package uk.ac.herts.orchestrator.repository.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.ColumnDefault;
+import org.hibernate.annotations.Generated;
+import org.hibernate.annotations.UpdateTimestamp;
 import uk.ac.herts.orchestrator.repository.model.TransactionStatus;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.UUID;
 
 @Entity
@@ -62,9 +64,12 @@ public class Transaction {
     @Column(name = "mined_block")
     private Long minedBlock;
 
-    @Column(name = "created_at")
+    @Column(name = "created_at", insertable = false, updatable = false)
+    @ColumnDefault("now()")
+    @Generated
     private OffsetDateTime createdAt;
 
+    @UpdateTimestamp
     @Column(name = "updated_at")
     private OffsetDateTime updatedAt;
 
@@ -83,8 +88,12 @@ public class Transaction {
     @Column(name = "failed_at")
     private OffsetDateTime failedAt;
 
-    @Column(name = "trace_id", length = 64)
-    private String traceId;
+    @Column(name = "first_fault_at")
+    private OffsetDateTime firstFaultAt;
+
+    @Column(name = "trace_id", columnDefinition = "bigserial", insertable = false, updatable = false)
+    @Generated
+    private Long traceId;
 
     @Column(name = "signed_hex_payload")
     private String signedHexPayload;
@@ -93,7 +102,4 @@ public class Transaction {
     @Column(name = "version")
     private Long version;
 
-    public void touchUpdatedAt() {
-        this.updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
-    }
 }

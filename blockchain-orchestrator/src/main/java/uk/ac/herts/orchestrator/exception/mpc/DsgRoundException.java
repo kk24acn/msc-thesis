@@ -43,15 +43,22 @@ public class DsgRoundException extends RuntimeException {
         return null;
     }
 
-    public static int extractReportingPartyId(Throwable throwable) {
+    public static DsgRoundException unwrap(Throwable throwable) {
         Throwable current = throwable;
         int depth = 0;
         while (current != null && depth < 10) {
-            if (current instanceof DsgRoundException e && e.getFailedSignerPartyId() != -1) {
-                return e.getFailedSignerPartyId();
+            if (current instanceof DsgRoundException e) {
+                return e;
             }
             current = current.getCause();
             depth++;
+        }
+        return new DsgRoundException("Unknown DSG failure", throwable, -1, -1, "UNKNOWN", throwable.getMessage());
+    }
+
+    public static int extractReportingPartyId(Throwable throwable) {
+        if (throwable instanceof DsgRoundException e) {
+            return e.getFailedSignerPartyId();
         }
         return -1;
     }

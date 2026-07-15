@@ -165,13 +165,14 @@ def collect_db_state(
 
     Polls every 10s until all rows reach a terminal status
     (CONFIRMED / STALLED / FAILED / CRYPTOGRAPHIC_ABORT), then writes a CSV to tests/results/.
-    Times out after 120s, logs a warning, and saves the partial snapshot
+    Times out after 1000s, logs a warning, and saves the partial snapshot
     without failing the test.
 
     Marker kwargs:
     - results_subdir: str  — subdirectory under tests/results/ (default: "")
     - disable_ui: bool     — stop dashboard containers before the test and restart them after DB stabilises + CSV is saved (default: False)
     """
+
     marker = request.node.get_closest_marker("collect_db_state")
     disable_ui = marker.kwargs.get("disable_ui", False) if marker else False
 
@@ -197,7 +198,7 @@ def collect_db_state(
 
     try:
         POLL_INTERVAL_S = 10
-        TIMEOUT_S = 500
+        TIMEOUT_S = 1000
         elapsed = 0
         df = transactions_repository.fetch_all()
 
@@ -253,11 +254,13 @@ def blockchain_refresh(
     funding_amount_eth = marker.kwargs.get("funding_amount_eth", "10000")
     grpc_concurrency_limit = marker.kwargs.get("grpc_concurrency_limit", None)
     quarantine_mode = marker.kwargs.get("quarantine_mode", None)  # Options: DISABLED | SOFT | STRICT | CIRCUIT_BREAKER
+    nonce_gap_sweeper_enabled = marker.kwargs.get("nonce_gap_sweeper_enabled", None)  # true | false
 
     logger.info(f"Blockchain refresh triggered for test (num_accounts={num_accounts}, funding={funding_amount_eth} ETH)") # fmt: skip
 
     orchestrator_env =  ({"GRPC_CONCURRENCY_LIMIT": str(grpc_concurrency_limit)} if grpc_concurrency_limit is not None else {}) \
-                                    |   ({"QUARANTINE_MODE": str(quarantine_mode)} if quarantine_mode is not None else {}) # fmt: skip
+                                    |   ({"QUARANTINE_MODE": str(quarantine_mode)} if quarantine_mode is not None else {}) \
+                                    |   ({"NONCE_GAP_SWEEPER_ENABLED": str(nonce_gap_sweeper_enabled)} if nonce_gap_sweeper_enabled is not None else {}) # fmt: skip
 
     async def refresh():
         await asyncio.gather(

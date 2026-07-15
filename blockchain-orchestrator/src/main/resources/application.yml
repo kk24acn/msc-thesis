@@ -33,14 +33,13 @@ spring:
       interval-ms: ${HARDHAT_BLOCK_CONFIRMATION_POLLER_INTERVAL_MS:5000}
     submission-worker:
       interval-ms: ${HARDHAT_SUBMISSION_WORKER_INTERVAL_MS:1000}
-      max-mempool-queue-size: ${HARDHAT_MAX_MEMPOOL_QUEUE_SIZE:60}
 
   mpc:
     grpc-concurrency-limit: ${GRPC_CONCURRENCY_LIMIT:10}
     signer-addresses: ${SIGNER_RPC_URLS:127.0.0.1:50051,127.0.0.1:50052,127.0.0.1:50053}
     dsg:
       max-retries: ${DSG_MAX_RETRIES:3}
-      max-rounds: ${DSG_MAX_ROUNDS:5}
+      max-rounds: ${DSG_MAX_ROUNDS:3}
       request-timeout: ${DSG_REQUEST_TIMEOUT:2s}
       eth-derivation-path: ${DSG_ETH_DERIVATION_PATH:m/0}
     quarantine:

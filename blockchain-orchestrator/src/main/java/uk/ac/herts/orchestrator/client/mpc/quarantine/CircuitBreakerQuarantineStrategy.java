@@ -105,6 +105,7 @@ public class CircuitBreakerQuarantineStrategy extends BlindQuarantineStrategy {
 
     @Override
     public void onQuorumFailure(List<Integer> executedQuorum) {
+        Instant newExpiry = Instant.now().plus(config.getTtl());
         for (Integer partyId : executedQuorum) {
             if (!activeProbes.remove(partyId)) {
                 continue;
@@ -113,8 +114,10 @@ public class CircuitBreakerQuarantineStrategy extends BlindQuarantineStrategy {
             if (counter != null) {
                 counter.set(0);
             }
-            log.info("Probe FAILED for party {}. Counter reset, next probe in {} transactions",
-                    partyId, probeInterval);
+            quarantinedNodes.computeIfPresent(partyId, (id, entry) ->
+                    new QuarantineEntry(id, entry.accuserPartyId(), entry.reason(), entry.quarantinedAt(), newExpiry));
+            log.warn("Probe FAILED for party {}. Quarantine TTL extended by {}. Counter reset, next probe in {} transactions",
+                    partyId, config.getTtl(), probeInterval);
         }
     }
 

@@ -2,7 +2,7 @@ import pytest
 
 from faultlab.client.orchestrator import OrchestratorClient
 
-RESULTS_SUBDIR = "BASELINE"
+RESULTS_SUBDIR = "THROUGHPUT"
 NUM_TRANSACTIONS = 1000
 
 

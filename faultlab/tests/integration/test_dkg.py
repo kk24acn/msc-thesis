@@ -22,10 +22,10 @@ def test_dkg_setup(dkg_client: DkgClient):
 
 
 @pytest.mark.setup
-def test_dkg_setup_multi(dkg_client: DkgClient):
+async def test_dkg_setup_multi(dkg_client: DkgClient):
     num_sessions = 10
     threshold = 2
     total_parties = 3
 
-    successful = dkg_client.setup_keys(num_sessions=num_sessions, threshold=threshold, total_parties=total_parties)
+    successful = await dkg_client.setup_keys(num_sessions=num_sessions, threshold=threshold, total_parties=total_parties) # fmt: skip
     assert successful == num_sessions, f"DKG setup incomplete: {successful}/{num_sessions} sessions successful"

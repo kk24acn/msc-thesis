@@ -1,0 +1,3 @@
+Quarantine Mode,Signing Throughput (TPS),Throughput Degradation (%)
+DISABLED,72.14,9.4
+CIRCUIT_BREAKER,81.56,0.0

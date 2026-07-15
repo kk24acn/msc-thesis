@@ -1,0 +1,10 @@
+Quarantine Mode,Failure Rate (% per round),Cumulative Failure Rate (% per transaction),Signing Throughput (TPS),Failover Success Rate (%),Throughput Degradation (%)
+CIRCUIT_BREAKER,3,11.47,40.64,100.0,48.96
+CIRCUIT_BREAKER,16,50.21,16.47,100.0,79.32
+CIRCUIT_BREAKER,44,90.17,49.62,100.0,37.68
+DISABLED,3,11.47,40.23,100.0,49.48
+DISABLED,16,50.21,10.41,100.0,86.93
+DISABLED,44,90.17,5.47,100.0,93.13
+SOFT,3,11.47,84.08,100.0,0.0
+SOFT,16,50.21,80.6,100.0,0.0
+SOFT,44,90.17,80.11,100.0,0.0

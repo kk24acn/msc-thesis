@@ -127,6 +127,7 @@ services:
       - SIGNER_RPC_URLS=faultlab-proxy-1:50051,faultlab-proxy-2:50051,faultlab-proxy-3:50051
       - GRPC_CONCURRENCY_LIMIT=${GRPC_CONCURRENCY_LIMIT:-10}
       - QUARANTINE_MODE=${QUARANTINE_MODE:-DISABLED} # Options: DISABLED | SOFT | STRICT | CIRCUIT_BREAKER
+      - NONCE_GAP_SWEEPER_ENABLED=${NONCE_GAP_SWEEPER_ENABLED:-true} # true | false
     networks:
       - signer
       - orchestrator

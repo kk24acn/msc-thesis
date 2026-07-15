@@ -1,0 +1,4 @@
+Quarantine Mode,Fault Lifted Tx 500 (s),Batch Completion (s),Post-Outage Duration (s),Optimal Duration (s),Scalar MTTR (s),Post-Recovery Rate (tx/s)
+DISABLED,101.65,105.97,4.31,4.58,-0.27,115.99
+SOFT,8.13,12.56,4.43,4.58,-0.16,112.88
+CIRCUIT_BREAKER,8.81,14.62,5.81,4.58,1.23,86.2

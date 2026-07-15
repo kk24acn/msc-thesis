@@ -25,9 +25,6 @@ public class SubmissionWorker {
     private final BlockchainClient blockchainClient;
     private final TransactionDao transactionDao;
 
-    @Value("${spring.hardhat.submission-worker.max-mempool-queue-size:50}")
-    private int maxQueueSize;
-
     @Scheduled(fixedDelayString = "${spring.hardhat.submission-worker.interval-ms:1000}")
     public void pollAndSubmit() {
         try {
@@ -42,19 +39,10 @@ public class SubmissionWorker {
                     .collect(Collectors.groupingBy(Transaction::getFromAddress));
 
             for (Map.Entry<String, List<Transaction>> entry : txsByAddress.entrySet()) {
-                String address = entry.getKey();
                 List<Transaction> addressTxs = entry.getValue();
 
-                long minedNonce = blockchainClient.fetchMinedTransactionCount(address);
-                long maxAllowedNonce = minedNonce + maxQueueSize;
-
                 for (Transaction tx : addressTxs) {
-                    if (tx.getNonce() < maxAllowedNonce) {
-                        submitTransaction(tx);
-                    } else {
-                        log.debug("Mempool sliding window limit reached for address {}. Halting submissions", address);
-                        break;
-                    }
+                    submitTransaction(tx);
                 }
             }
         } catch (Exception e) {

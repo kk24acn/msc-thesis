@@ -54,6 +54,4 @@ QUARANTINE_COLORS: dict[str, str] = {
     "SOFT": "#2ecc71",
     "CIRCUIT_BREAKER": "#2b5c8f",
 }
-
-HOT_PHASE_START_SECONDS: float = 4.0
 DSG_TOTAL_ROUNDS = 4  # 4 ExecuteDsgPhase (1 Init + 3 Advance)

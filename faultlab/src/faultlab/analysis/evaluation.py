@@ -5,7 +5,7 @@ import pandas as pd
 
 from .loader import load_csv
 from .metrics import execution_summary, status_summary
-from .constants import DSG_TOTAL_ROUNDS, QUARANTINE_MODES, HOT_PHASE_START_SECONDS
+from .constants import DSG_TOTAL_ROUNDS, QUARANTINE_MODES
 
 
 def get_base_01_summary(dir: Path) -> dict[str, float]:
@@ -25,6 +25,7 @@ def get_base_01_summary(dir: Path) -> dict[str, float]:
 
             t0 = df["created_at"].min()
             sub["sec"] = (sub["signed_at"] - t0).dt.total_seconds()
+            sub = sub.sort_values("sec")
 
             dur_e2e = (df["confirmed_at"].max() - t0).total_seconds()
             if dur_e2e > 0:
@@ -34,11 +35,13 @@ def get_base_01_summary(dir: Path) -> dict[str, float]:
             if dur_sign > 0:
                 sign_list.append(len(sub) / dur_sign)
 
-            hot_sub = sub[sub["sec"] >= HOT_PHASE_START_SECONDS]
-            dur_hot = hot_sub["sec"].max() - HOT_PHASE_START_SECONDS
-
-            if dur_hot > 0:
-                hot_list.append(len(hot_sub) / dur_hot)
+            # Calculate Hot-Phase Signing TPS across the last 500 transactions
+            if len(sub) > 500:
+                t_500 = sub.iloc[499]["sec"]
+                t_end = sub.iloc[-1]["sec"]
+                dur_hot = t_end - t_500
+                if dur_hot > 0:
+                    hot_list.append((len(sub) - 500.0) / dur_hot)
 
     return {
         "e2e_tps": round(float(pd.Series(e2e_list).median()), 2) if e2e_list else 0.0,

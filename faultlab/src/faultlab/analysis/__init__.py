@@ -6,7 +6,6 @@ from .constants import (
     LATENCY_COLS,
     QUARANTINE_MODES,
     QUARANTINE_COLORS,
-    HOT_PHASE_START_SECONDS,
 )
 from .loader import load_csv, enrich_latency_metrics, save_transactions_csv
 from .metrics import execution_summary, aggregate_summaries, status_summary, describe_latency_percentiles
@@ -27,7 +26,6 @@ __all__ = [
     "LATENCY_COLS",
     "QUARANTINE_MODES",
     "QUARANTINE_COLORS",
-    "HOT_PHASE_START_SECONDS",
     "load_csv",
     "enrich_latency_metrics",
     "save_transactions_csv",

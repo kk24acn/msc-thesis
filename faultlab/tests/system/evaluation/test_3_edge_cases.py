@@ -7,23 +7,6 @@ from tests.conftest import EVAL_RESULTS_BASE_DIR, EVAL_BATCH_SIZE, SUBMISSION_CO
 
 EVAL_RESULTS_BASE_DIR = f"{EVAL_RESULTS_BASE_DIR}/3_EDGE_CASES"
 
-##################################################################################################################
-# ----------------------------------------  DROP-01 -------------------------------------------------------------#
-
-
-@pytest.mark.collect_db_state(results_subdir=f"{EVAL_RESULTS_BASE_DIR}/DROP_01", disable_ui=True)
-@pytest.mark.blockchain_refresh(num_accounts=10, funding_amount_eth="10000.0", quarantine_mode="CIRCUIT_BREAKER")
-@pytest.mark.inject_fault(fault_type="SILENT_DROP_RES", failure_rate=100, signers=[2], metadata={"rounds": [4]})
-async def test_drop_01_resource_leak(
-    orchestrator_client: OrchestratorClient,
-    mpc_accounts: list[tuple[str, str]],
-) -> None:
-    await orchestrator_client.submit_transactions_batch(
-        accounts=mpc_accounts,
-        count=EVAL_BATCH_SIZE,
-        amount_range=(0.00001, 100),
-        max_concurrency=SUBMISSION_CONCURRENCY,
-    )
 
 
 #################################################################################################################

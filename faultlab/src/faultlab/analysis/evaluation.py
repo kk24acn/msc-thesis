@@ -230,7 +230,7 @@ def get_edge_case_boundary_matrix(edge_cases_dir: Path, base_01_dir: Path) -> pd
     EDGE_CASE_CONFIGS = [
         ("BYZ_01", "*.csv", "BYZ-01: MUTATE"),
         ("BYZ_02", "*.csv", "BYZ-02: REPLAY"),
-        ("DROP_01", "*.csv", "DROP-01: SILENT_DROP_RES (Round 4)"),
+
         ("SWEEP_01", "*CRASH_RES*.csv", "SWEEP-01: CRASH_RES"),
         ("SWEEP_01", "*MUTATE*.csv", "SWEEP-01: MUTATE"),
         ("SWEEP_01", "*SILENT_DROP_RES*.csv", "SWEEP-01: SILENT_DROP_RES"),
@@ -255,8 +255,6 @@ def get_edge_case_boundary_matrix(edge_cases_dir: Path, base_01_dir: Path) -> pd
         confirmed_std = 0
         confirmed_swept = 0
         signing_retries = 0
-        e2e_medians = []
-        signing_queue_medians = []
         tps_list = []
 
         for file_path in csv_files:
@@ -272,9 +270,6 @@ def get_edge_case_boundary_matrix(edge_cases_dir: Path, base_01_dir: Path) -> pd
             confirmed_swept += stat_sum.get("CONFIRMED_SWEEPED", 0)
             signing_retries += int(df["signing_retries"].sum())
 
-            e2e_medians.append(exec_sum["e2e_median_s"])
-            signing_queue_medians.append(exec_sum["signing_queue_median_s"])
-
             sub = df[df["status"] == "CONFIRMED"].copy()
             if not sub.empty:
                 t0 = df["created_at"].min()
@@ -285,8 +280,6 @@ def get_edge_case_boundary_matrix(edge_cases_dir: Path, base_01_dir: Path) -> pd
         success_rate = (confirmed_std / total_txs * 100.0) if total_txs > 0 else 0.0
         med_tps = float(pd.Series(tps_list).median()) if tps_list else 0.0
         deg = max(0.0, ((base_tps - med_tps) / base_tps) * 100.0) if base_tps > 0 else 0.0
-        med_e2e = round(float(pd.Series(e2e_medians).median()), 2) if e2e_medians else 0.0
-        med_sign = round(float(pd.Series(signing_queue_medians).median()), 2) if signing_queue_medians else 0.0
 
         records.append(
             {
@@ -298,8 +291,6 @@ def get_edge_case_boundary_matrix(edge_cases_dir: Path, base_01_dir: Path) -> pd
                 "Confirmed (Standard)": confirmed_std,
                 "Confirmed (Swept)": confirmed_swept,
                 "Signing Retries": signing_retries,
-                "Median E2E Latency (s)": med_e2e,
-                "Median Signing Queue (s)": med_sign,
             }
         )
 

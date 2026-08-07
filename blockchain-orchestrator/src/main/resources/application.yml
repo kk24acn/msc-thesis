@@ -43,7 +43,7 @@ spring:
       request-timeout: ${DSG_REQUEST_TIMEOUT:2s}
       eth-derivation-path: ${DSG_ETH_DERIVATION_PATH:m/0}
     quarantine:
-      mode: ${QUARANTINE_MODE:DISABLED} # Options: DISABLED | SOFT | STRICT | CIRCUIT_BREAKER
+      mode: ${QUARANTINE_MODE:CIRCUIT_BREAKER} # Options: DISABLED | SOFT | STRICT | CIRCUIT_BREAKER
       eviction-interval-ms: ${QUARANTINE_EVICTION_INTERVAL_MS:1000}
       ttl: ${QUARANTINE_TTL:10s}
       probe-interval: ${QUARANTINE_PROBE_INTERVAL:10}

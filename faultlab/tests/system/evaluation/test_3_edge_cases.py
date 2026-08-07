@@ -8,7 +8,6 @@ from tests.conftest import EVAL_RESULTS_BASE_DIR, EVAL_BATCH_SIZE, SUBMISSION_CO
 EVAL_RESULTS_BASE_DIR = f"{EVAL_RESULTS_BASE_DIR}/3_EDGE_CASES"
 
 
-
 #################################################################################################################
 # ----------------------------------------  BYZ-01 -------------------------------------------------------------#
 
@@ -72,7 +71,7 @@ async def test_SWEEP_00_sequence_sweeper_capacity_nonce_gap_sweeper_disabled(
     "fault_type, params",
     [
         ("CRASH_RES", {}),
-        ("MUTATE", {"metadata": {"offset": 10}}),
+        ("MUTATE", {}),
         ("SILENT_DROP_RES", {"rounds": [4]}),
     ],
 )

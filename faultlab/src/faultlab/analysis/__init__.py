@@ -13,6 +13,7 @@ from .evaluation import (
     get_base_01_summary,
     get_crash_01_summary_df,
     get_latency_01_summary_df,
+    get_latency_01_degradation_df,
     get_trans_01_summary_df,
     get_trans_02_summary_df,
     get_edge_case_boundary_matrix,

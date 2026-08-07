@@ -157,7 +157,7 @@ public class DsgCoordinator {
 
     private List<ByteString> initializeQuorum(String keyId, String dsgSessionId, byte[] messageHash,
             List<Integer> quorum, int retry) {
-        log.info("Initializing specific quorum: {}", quorum);
+        log.info("--- DSG Phase 1; Quorum {} ---", quorum);
         List<CompletableFuture<ByteString>> futures = new ArrayList<>();
 
         for (Integer partyId : quorum) {
@@ -189,7 +189,7 @@ public class DsgCoordinator {
         try {
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
             List<ByteString> initialPayloads = futures.stream().map(CompletableFuture::join).toList();
-            log.info("Quorum {} initialized successfully with {} Phase 1 payloads", quorum, initialPayloads.size());
+            log.info("DSG Phase 1 completed ({} payloads)", initialPayloads.size());
             return initialPayloads;
         } catch (Exception e) {
             throw DsgRoundException.unwrap(e);
@@ -198,11 +198,12 @@ public class DsgCoordinator {
 
     private SignatureData processRounds(String dsgSessionId, List<Integer> quorum, byte[] messageHash,
             String expectedAddress, int retry, List<ByteString> currentPayloads) {
-        log.info("Starting DSG rounds for session: {}", dsgSessionId);
+        log.info("Continuing DSG phases for session: {}", dsgSessionId);
 
         int maxRounds = mpcProperties.getDsg().getMaxRounds();
         for (int round = 0; round < maxRounds; round++) {
-            log.info("--- DSG Round {}; Quorum {} ---", round, quorum);
+            int currentPhase = round + 2;
+            log.info("--- DSG Phase {}; Quorum {} ---", currentPhase, quorum);
 
             try {
                 List<CompletableFuture<DsgPhaseResponse>> roundFutures = createRoundFutures(
@@ -218,11 +219,11 @@ public class DsgCoordinator {
 
                 if (responses.get(0).hasSignatureShare()) {
                     SignatureData sigData = signatureAggregator.aggregate(responses, messageHash, expectedAddress);
-                    log.info("DSG signature obtained after {} rounds", round + 1);
+                    log.info("DSG signature obtained after {} phases", currentPhase);
                     return sigData;
                 }
 
-                log.info("DSG round {} completed", round + 1);
+                log.info("DSG Phase {} completed", currentPhase);
             } catch (SignatureAggregationException e) {
                 throw e;
             } catch (Exception e) {

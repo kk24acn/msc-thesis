@@ -126,6 +126,54 @@ def get_latency_01_summary_df(dir: Path) -> pd.DataFrame:
     return df_out.groupby(["Mode", "Delay (ms)"]).median().reset_index().sort_values(["Mode", "Delay (ms)"])
 
 
+def get_latency_01_degradation_df(dir: Path, base_tps: float) -> pd.DataFrame:
+    if not dir.exists() or base_tps <= 0:
+        return pd.DataFrame()
+
+    pattern = re.compile(r"quarantine_(disabled|circuit_breaker)_(\d+)_")
+    runs = {}
+
+    for file_path in sorted(dir.glob("*.csv")):
+        match = pattern.search(file_path.name)
+        if not match:
+            continue
+        mode = QUARANTINE_MODES.get(match.group(1), match.group(1))
+        delay = int(match.group(2))
+
+        df_out = load_csv(file_path)
+        sub = df_out[df_out["status"] == "CONFIRMED"].copy()
+        if sub.empty:
+            continue
+        t0 = df_out["created_at"].min()
+        dur = (sub["signed_at"].max() - t0).total_seconds()
+
+        if dur > 0:
+            key = (mode, delay)
+            if key not in runs:
+                runs[key] = []
+            runs[key].append(len(sub) / dur)
+
+    records = []
+    for (mode, delay), tps_list in runs.items():
+        if not tps_list:
+            continue
+        med_tps = float(pd.Series(tps_list).median())
+        deg = max(0.0, ((base_tps - med_tps) / base_tps) * 100.0)
+        records.append(
+            {
+                "Quarantine Mode": mode,
+                "Delay (ms)": delay,
+                "Signing Throughput (TPS)": round(med_tps, 2),
+                "Throughput Degradation (%)": round(deg, 2),
+            }
+        )
+
+    df_out = pd.DataFrame(records)
+    if not df_out.empty:
+        df_out = df_out.sort_values(by=["Delay (ms)", "Quarantine Mode"])
+    return df_out
+
+
 def get_trans_01_summary_df(dir: Path, base_tps: float) -> pd.DataFrame:
     if not dir.exists():
         return pd.DataFrame()
@@ -230,10 +278,9 @@ def get_edge_case_boundary_matrix(edge_cases_dir: Path, base_01_dir: Path) -> pd
     EDGE_CASE_CONFIGS = [
         ("BYZ_01", "*.csv", "BYZ-01: MUTATE"),
         ("BYZ_02", "*.csv", "BYZ-02: REPLAY"),
-
         ("SWEEP_01", "*CRASH_RES*.csv", "SWEEP-01: CRASH_RES"),
-        ("SWEEP_01", "*MUTATE*.csv", "SWEEP-01: MUTATE"),
-        ("SWEEP_01", "*SILENT_DROP_RES*.csv", "SWEEP-01: SILENT_DROP_RES"),
+        ("SWEEP_01", "*MUTATE*.csv", "SWEEP-02: MUTATE"),
+        ("SWEEP_01", "*SILENT_DROP_RES*.csv", "SWEEP-03: SILENT_DROP_RES"),
     ]
 
     if not edge_cases_dir.exists():

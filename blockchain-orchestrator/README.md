@@ -1,4 +1,9 @@
-# Add `mitmproxy` certificate to truststore
+# Blockchain Orchestrator
+
+Spring Boot 4 (Java 25) central service handling DKLs23 signing session coordination and transaction submission.
+
+## Execution
+Run locally:
 ```sh
-keytool -importcert -alias mitmproxy -file ~/.mitmproxy/mitmproxy-ca-cert.pem -keystore src/main/resources/certs/ca.p12 -storepass secret -noprompt
+mvn spring-boot:run
 ```

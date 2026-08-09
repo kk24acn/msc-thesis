@@ -6,7 +6,8 @@ COPY package*.json ./
 
 ENV NODE_ENV=development
 
-RUN npm ci
+RUN apk add --no-cache git
+RUN npm install
 
 COPY . .
 
